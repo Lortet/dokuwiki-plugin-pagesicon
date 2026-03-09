@@ -1,6 +1,7 @@
 <?php
 $lang['icon_name']           = "Nom de l'icone";
 $lang['icon_thumbnail_name'] = "Nom de la petite icone";
+$lang['default_image']       = "Image par defaut (ID media, ex: wiki:logo.png)";
 $lang['icon_size']           = "Taille de l'icone (px)";
 $lang['extensions']          = "Extensions des images (separees par ;)";
 $lang['show_on_top']         = "Afficher l'icone en haut de page";

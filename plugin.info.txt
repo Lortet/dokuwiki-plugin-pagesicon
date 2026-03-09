@@ -1,6 +1,7 @@
 base   pagesicon
 author Valentin LORTET
 email  valentin@lortet.io
-date   2026-03-06
+date   2026-03-09
 name   Pages Icon
-desc   Manage and expose page/media icons with helper API and cache notifications
+desc   Manage and expose page/media icons
+url    https://www.dokuwiki.org/plugin:pagesicon

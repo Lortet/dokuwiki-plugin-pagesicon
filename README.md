@@ -7,15 +7,15 @@ Avec **pagesicon**, c'est possible.
 - un **plugin** (affichage et gestion des icônes),
 - un **helper** (API réutilisable par d'autres plugins, comme `catmenu` et `visualindex`).
 
-## Ce Que Fait Le Plugin
+## Ce que fait le plugin
 
 - Affiche une icône en haut de la page (`show`), si activé.
 - Peut utiliser l'icône de la page comme favicon d'onglet (`show_as_favicon`).
 - Fournit une page de gestion d'icône par page : `?do=pagesicon`.
 - Gère les variantes `big` et `small`.
-- Notifie les autres plugins quand une icône change via `PLUGIN_PAGESICON_UPDATED`.
+- Notifie les autres plugins quand une icône change via `PLUGIN_PAGESICON_UPDATED` (pour invalider leurs caches).
 
-## Paramètres De Configuration
+## Paramètres de configuration
 
 Dans le `Configuration Manager` :
 
@@ -24,6 +24,8 @@ Dans le `Configuration Manager` :
 
 - `icon_thumbnail_name` : noms candidats pour l'icône `small` (séparés par `;`).  
   Supporte `~pagename~`.
+
+- `default_image` : image par défaut (mediaID) utilisée uniquement quand le fallback est explicitement activé dans l'API helper.
 
 - `icon_size` : taille (px) de l'icône affichée en haut de page.
 
@@ -39,7 +41,7 @@ Depuis une page, utiliser l'action `Gérer l'icône` puis uploader/supprimer.
 
 Le plugin travaille sur la **page courante** (`$ID`), pas sur une cible passée en paramètre.
 
-## API Helper
+## API helper
 
 Charger le helper :
 
@@ -47,27 +49,30 @@ Charger le helper :
 $pagesicon = plugin_load('helper', 'pagesicon');
 ```
 
-### Résolution En mediaID
+### Résolution en mediaID
 
-- `getPageImage(string $namespace, string $pageID, string $size = 'bigorsmall')`  
+- `getPageIconId(string $namespace, string $pageID, string $size = 'bigorsmall')`  
   Retourne un mediaID (`ns:file.ext`) ou `false`.
 
-- `getMediaImage(string $mediaID, string $size = 'bigorsmall')`  
+- `getMediaIconId(string $mediaID, string $size = 'bigorsmall')`  
   Retourne le mediaID d'icône pour un média, ou `false`.
 
 `size` accepte : `big`, `small`, `bigorsmall`, `smallorbig`.
 
-### Résolution En URL Versionnée
+### Résolution en URL versionnée
 
-- `getImageIcon(string $namespace, string $pageID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null)`  
+- `getPageIconUrl(string $namespace, string $pageID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null, bool $withDefault = false)`  
   Retourne une URL d'icône (avec `pi_ts=<filemtime>`) ou `false`.  
   Renseigne aussi `$mtime`.
 
-- `getMediaIcon(string $mediaID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null)`  
+- `getMediaIconUrl(string $mediaID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null, bool $withDefault = false)`  
   Retourne une URL d'icône de média (avec `pi_ts=<filemtime>`) ou `false`.  
   Renseigne aussi `$mtime`.
 
-### URLs De Gestion
+- `getDefaultIconUrl(array $params = ['width' => 55], ?int &$mtime = null)`  
+  Retourne l'URL de l'image par défaut configurée, ou `false`.
+
+### URLs de gestion
 
 - `getUploadIconPage(string $targetPage = '')`  
   Retourne l'URL `?do=pagesicon` d'une page, ou `null` si non autorisé.
@@ -89,3 +94,18 @@ Payload :
 - `media_id`.
 
 Chaque plugin consommateur est responsable de sa propre invalidation de cache.
+
+## Compatibilité des signatures
+
+- Avant `09-03-2025` :
+  - `getPageImage(string $namespace, string $pageID, string $size = 'bigorsmall')`
+  - `getMediaImage(string $mediaID, string $size = 'bigorsmall')`
+  - `getImageIcon(string $namespace, string $pageID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null)`
+  - `getMediaIcon(string $mediaID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null)`
+
+La compatibilité est conservée via des alias legacy :
+- `getPageImage(...)` -> `getPageIconId(...)` (le paramètre legacy `$withDefault` est ignoré)
+- `getMediaImage(...)` -> `getMediaIconId(...)` (le paramètre legacy `$withDefault` est ignoré)
+- `getImageIcon(...)` -> `getPageIconUrl(...)`
+- `getMediaIcon(...)` -> `getMediaIconUrl(...)`
+- `getDefaultImageIcon(...)` -> `getDefaultIconUrl(...)`

@@ -7,13 +7,13 @@ With **pagesicon**, this is now possible.
 - a **plugin** (icon display and management),
 - a **helper** (reusable API for other plugins like `catmenu` and `visualindex`).
 
-## What The Plugin Does
+## What the plugin does
 
 - Displays an icon at the top of the page (`show`), when enabled.
 - Can use the page icon as browser tab favicon (`show_as_favicon`).
 - Provides a per-page icon management page: `?do=pagesicon`.
 - Supports `big` and `small` icon variants.
-- Notifies other plugins when an icon changes through `PLUGIN_PAGESICON_UPDATED`.
+- Notifies other plugins when an icon changes through `PLUGIN_PAGESICON_UPDATED` (for cache invalidation on consumer plugins).
 
 ## Configuration
 
@@ -24,6 +24,8 @@ In the `Configuration Manager`:
 
 - `icon_thumbnail_name`: candidate names for the `small` icon (separated by `;`).  
   Supports `~pagename~`.
+
+- `default_image`: default image (media ID) used only when helper API fallback is explicitly enabled.
 
 - `icon_size`: size (px) of the icon shown at the top of pages.
 
@@ -49,23 +51,26 @@ $pagesicon = plugin_load('helper', 'pagesicon');
 
 ### mediaID Resolution
 
-- `getPageImage(string $namespace, string $pageID, string $size = 'bigorsmall')`  
+- `getPageIconId(string $namespace, string $pageID, string $size = 'bigorsmall')`  
   Returns a mediaID (`ns:file.ext`) or `false`.
 
-- `getMediaImage(string $mediaID, string $size = 'bigorsmall')`  
+- `getMediaIconId(string $mediaID, string $size = 'bigorsmall')`  
   Returns the icon mediaID for a media item, or `false`.
 
 `size` supports: `big`, `small`, `bigorsmall`, `smallorbig`.
 
 ### Versioned URL Resolution
 
-- `getImageIcon(string $namespace, string $pageID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null)`  
+- `getPageIconUrl(string $namespace, string $pageID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null, bool $withDefault = false)`  
   Returns an icon URL (with `pi_ts=<filemtime>`) or `false`.  
   Also fills `$mtime`.
 
-- `getMediaIcon(string $mediaID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null)`  
+- `getMediaIconUrl(string $mediaID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null, bool $withDefault = false)`  
   Returns a media icon URL (with `pi_ts=<filemtime>`) or `false`.  
   Also fills `$mtime`.
+
+- `getDefaultIconUrl(array $params = ['width' => 55], ?int &$mtime = null)`  
+  Returns the configured default image URL, or `false`.
 
 ### Management URLs
 
@@ -89,3 +94,18 @@ Payload:
 - `media_id`.
 
 Each consumer plugin remains responsible for its own cache invalidation strategy.
+
+## Signature compatibility
+
+- Before `09-03-2025`:
+  - `getPageImage(string $namespace, string $pageID, string $size = 'bigorsmall')`
+  - `getMediaImage(string $mediaID, string $size = 'bigorsmall')`
+  - `getImageIcon(string $namespace, string $pageID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null)`
+  - `getMediaIcon(string $mediaID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null)`
+
+Compatibility is preserved through legacy aliases:
+- `getPageImage(...)` -> `getPageIconId(...)` (legacy `$withDefault` argument is ignored)
+- `getMediaImage(...)` -> `getMediaIconId(...)` (legacy `$withDefault` argument is ignored)
+- `getImageIcon(...)` -> `getPageIconUrl(...)`
+- `getMediaIcon(...)` -> `getMediaIconUrl(...)`
+- `getDefaultImageIcon(...)` -> `getDefaultIconUrl(...)`

@@ -3,6 +3,30 @@ if (!defined('DOKU_INC')) die();
 
 class helper_plugin_pagesicon extends DokuWiki_Plugin
 {
+    private function getBundledDefaultImagePath(): string
+    {
+        return DOKU_INC . 'lib/plugins/pagesicon/images/default_image.png';
+    }
+
+    private function getBundledDefaultImageUrl(): string
+    {
+        $path = $this->getBundledDefaultImagePath();
+        if (!@file_exists($path)) return '';
+
+        $base = rtrim((string)DOKU_BASE, '/');
+        $url = $base . '/lib/plugins/pagesicon/images/default_image.png';
+        $mtime = @filemtime($path);
+        return $this->appendVersionToUrl($url, $mtime ? (int)$mtime : 0);
+    }
+
+    private function getConfiguredDefaultImageMediaID()
+    {
+        $mediaID = cleanID((string)$this->getConf('default_image'));
+        if ($mediaID === '') return false;
+        if (!@file_exists(mediaFN($mediaID))) return false;
+        return $mediaID;
+    }
+
     private function getMediaMTime(string $mediaID): int
     {
         $mediaID = cleanID($mediaID);
@@ -95,7 +119,11 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin
         return $fileExt !== '' && in_array($fileExt, $extensions, true);
     }
 
-    public function getPageImage(string $namespace, string $pageID, string $size = 'bigorsmall')
+    public function getPageIconId(
+        string $namespace,
+        string $pageID,
+        string $size = 'bigorsmall'
+    )
     {
         $sizeMode = $this->normalizeSizeMode($size);
         $extensions = $this->getExtensions();
@@ -140,6 +168,16 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin
         return false;
     }
 
+    // Legacy alias kept for backward compatibility.
+    public function getPageImage(
+        string $namespace,
+        string $pageID,
+        string $size = 'bigorsmall',
+        bool $withDefault = false
+    ) {
+        return $this->getPageIconId($namespace, $pageID, $size);
+    }
+
     public function getUploadIconPage(string $targetPage = '')
     {
         global $ID;
@@ -160,7 +198,7 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin
         return wl($targetPage, ['do' => 'pagesicon']);
     }
 
-    public function getMediaImage(string $mediaID, string $size = 'bigorsmall')
+    public function getMediaIconId(string $mediaID, string $size = 'bigorsmall')
     {
         $mediaID = cleanID($mediaID);
         if ($mediaID === '') return false;
@@ -171,18 +209,51 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin
         $pageID = cleanID($base);
         if ($pageID === '') return false;
 
-        return $this->getPageImage($namespace, $pageID, $size);
+        return $this->getPageIconId($namespace, $pageID, $size);
     }
 
-    public function getImageIcon(
+    // Legacy alias kept for backward compatibility.
+    public function getMediaImage(string $mediaID, string $size = 'bigorsmall', bool $withDefault = false)
+    {
+        return $this->getMediaIconId($mediaID, $size);
+    }
+
+    public function getDefaultIconUrl(array $params = ['width' => 55], ?int &$mtime = null)
+    {
+        $mediaID = $this->getConfiguredDefaultImageMediaID();
+        if ($mediaID) {
+            $mtime = $this->getMediaMTime((string)$mediaID);
+            $url = (string)ml((string)$mediaID, $params);
+            if ($url === '') return false;
+            return $this->appendVersionToUrl($url, $mtime);
+        }
+
+        $mtime = 0;
+        $bundled = $this->getBundledDefaultImageUrl();
+        if ($bundled !== '') return $bundled;
+
+        return false;
+    }
+
+    // Legacy alias kept for backward compatibility.
+    public function getDefaultImageIcon(array $params = ['width' => 55], ?int &$mtime = null)
+    {
+        return $this->getDefaultIconUrl($params, $mtime);
+    }
+
+    public function getPageIconUrl(
         string $namespace,
         string $pageID,
         string $size = 'bigorsmall',
         array $params = ['width' => 55],
-        ?int &$mtime = null
+        ?int &$mtime = null,
+        bool $withDefault = false
     ) {
-        $mediaID = $this->getPageImage($namespace, $pageID, $size);
+        $mediaID = $this->getPageIconId($namespace, $pageID, $size);
         if (!$mediaID) {
+            if ($withDefault) {
+                return $this->getDefaultIconUrl($params, $mtime);
+            }
             $mtime = 0;
             return false;
         }
@@ -193,14 +264,30 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin
         return $this->appendVersionToUrl($url, $mtime);
     }
 
-    public function getMediaIcon(
+    // Legacy alias kept for backward compatibility.
+    public function getImageIcon(
+        string $namespace,
+        string $pageID,
+        string $size = 'bigorsmall',
+        array $params = ['width' => 55],
+        ?int &$mtime = null,
+        bool $withDefault = false
+    ) {
+        return $this->getPageIconUrl($namespace, $pageID, $size, $params, $mtime, $withDefault);
+    }
+
+    public function getMediaIconUrl(
         string $mediaID,
         string $size = 'bigorsmall',
         array $params = ['width' => 55],
-        ?int &$mtime = null
+        ?int &$mtime = null,
+        bool $withDefault = false
     ) {
-        $iconMediaID = $this->getMediaImage($mediaID, $size);
+        $iconMediaID = $this->getMediaIconId($mediaID, $size);
         if (!$iconMediaID) {
+            if ($withDefault) {
+                return $this->getDefaultIconUrl($params, $mtime);
+            }
             $mtime = 0;
             return false;
         }
@@ -209,6 +296,17 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin
         $url = (string)ml((string)$iconMediaID, $params);
         if ($url === '') return false;
         return $this->appendVersionToUrl($url, $mtime);
+    }
+
+    // Legacy alias kept for backward compatibility.
+    public function getMediaIcon(
+        string $mediaID,
+        string $size = 'bigorsmall',
+        array $params = ['width' => 55],
+        ?int &$mtime = null,
+        bool $withDefault = false
+    ) {
+        return $this->getMediaIconUrl($mediaID, $size, $params, $mtime, $withDefault);
     }
 
     public function getUploadMediaIconPage(string $mediaID = '')
