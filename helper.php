@@ -1,8 +1,7 @@
 <?php
 if (!defined('DOKU_INC')) die();
 
-class helper_plugin_pagesicon extends DokuWiki_Plugin
-{
+class helper_plugin_pagesicon extends DokuWiki_Plugin {
     private const BUNDLED_DEFAULT_IMAGE_RELATIVE_PATH = 'lib/plugins/pagesicon/images/default_image.png';
 
     private function getBundledDefaultImagePath(): string {

@@ -3,7 +3,6 @@ if(!defined('DOKU_INC')) die();
 if(!defined('DOKU_MEDIAMANAGER_URL_BASE')) define('DOKU_MEDIAMANAGER_URL_BASE', DOKU_BASE . 'lib/exe/mediamanager.php');
 
 class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
-	
 	public function register(Doku_Event_Handler $controller) {
 		$controller->register_hook('TPL_CONTENT_DISPLAY', 'BEFORE', $this, '_displaypageicon');
 		$controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'setPageFavicon');
@@ -18,6 +17,7 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		global $ID;
 
 		if (($event->data['view'] ?? '') !== 'page') return;
+		if ($this->isActionDisabled('pagesicon')) return;
 		if (auth_quickaclcheck((string)$ID) < AUTH_UPLOAD) return;
 
 		foreach (($event->data['items'] ?? []) as $item) {
@@ -49,6 +49,19 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 
 	private function getIconSize(): int {
 		return (int)$this->getConf('icon_size');
+	}
+
+	private function isActionDisabled(string $actionName): bool {
+		global $conf;
+
+		$disabled = explode(',', (string)($conf['disableactions'] ?? ''));
+		$disabled = array_map(static function ($value) {
+			return strtolower(trim((string)$value));
+		}, $disabled);
+		$actionName = strtolower(trim($actionName));
+		if ($actionName === '') return false;
+
+		return in_array($actionName, $disabled, true);
 	}
 
 	private function isLayoutIncludePage(string $pageID): bool {
