@@ -1,18 +1,20 @@
 <?php
 if(!defined('DOKU_INC')) die();
+if(!defined('DOKU_MEDIAMANAGER_URL_BASE')) define('DOKU_MEDIAMANAGER_URL_BASE', DOKU_BASE . 'lib/exe/mediamanager.php');
 
 class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 	
 	public function register(Doku_Event_Handler $controller) {
 		$controller->register_hook('TPL_CONTENT_DISPLAY', 'BEFORE', $this, '_displaypageicon');
 		$controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'setPageFavicon');
+		$controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'addUploadFormScript');
+		$controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'addFaviconRuntimeScript');
 		$controller->register_hook('ACTION_ACT_PREPROCESS', 'BEFORE', $this, 'handleAction');
 		$controller->register_hook('TPL_ACT_RENDER', 'BEFORE', $this, 'renderAction');
 		$controller->register_hook('MENU_ITEMS_ASSEMBLY', 'AFTER', $this, 'addPageAction');
 	}
 
-	public function addPageAction(Doku_Event $event): void
-	{
+	public function addPageAction(Doku_Event $event): void {
 		global $ID;
 
 		if (($event->data['view'] ?? '') !== 'page') return;
@@ -31,8 +33,7 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		$targetPage = cleanID((string)$ID);
 
 		$event->data['items'][] = new class($targetPage, $label, $title) extends \dokuwiki\Menu\Item\AbstractItem {
-			public function __construct(string $targetPage, string $label, string $title)
-			{
+			public function __construct(string $targetPage, string $label, string $title) {
 				parent::__construct();
 				$this->type = 'pagesicon';
 				$this->id = $targetPage;
@@ -47,31 +48,31 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 	}
 
 	private function getIconSize(): int {
-		$size = (int)$this->getConf('icon_size');
-		if($size < 8) return 55;
-		if($size > 512) return 512;
-		return $size;
+		return (int)$this->getConf('icon_size');
 	}
 
-	public function setPageFavicon(Doku_Event $event): void
-	{
+	private function isLayoutIncludePage(string $pageID): bool {
+		// DokuWiki may temporarily switch $ID while rendering layout includes such as
+		// sidebar/footer. In these hooks we have no reliable "main content only" flag,
+		// so we explicitly ignore those technical pages to avoid replacing the current
+		// page icon/favicon with the one from the layout include.
+		return $pageID === 'sidebar' || $pageID === 'footer';
+	}
+
+	public function setPageFavicon(Doku_Event $event): void {
 		global $ACT, $ID;
 
 		if (!(bool)$this->getConf('show_as_favicon')) return;
 		if ($ACT !== 'show') return;
 
 		$pageID = noNS((string)$ID);
-		if ($pageID === 'sidebar' || $pageID === 'footer') return;
+		if ($this->isLayoutIncludePage($pageID)) return;
 
 		$helper = plugin_load('helper', 'pagesicon');
 		if (!$helper) return;
 
 		$namespace = getNS((string)$ID);
-		$iconMediaID = $helper->getPageImage($namespace, $pageID, 'smallorbig');
-		if (!$iconMediaID) return;
-
-		$favicon = html_entity_decode((string)ml($iconMediaID, ['w' => 32]), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-		$favicon = $this->addVersionToUrl($favicon, $this->getMediaVersionStamp($iconMediaID), false);
+		$favicon = $helper->getPageIconUrl($namespace, $pageID, 'smallorbig', ['w' => 32]);
 		if (!$favicon) return;
 
 		if (!isset($event->data['link']) || !is_array($event->data['link'])) {
@@ -97,73 +98,65 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		}
 
 		$links[] = ['rel' => 'icon', 'href' => $favicon];
-		$links[] = ['rel' => 'shortcut icon', 'href' => $favicon];
+		$links[] = ['rel' => 'shortcut icon', 'href' => $favicon]; // Kept for legacy browser compatibility.
 		$event->data['link'] = $links;
+	}
+
+	public function addUploadFormScript(Doku_Event $event): void {
+		global $ACT;
+
+		if ($ACT !== 'pagesicon') return;
+
+		if (!isset($event->data['script']) || !is_array($event->data['script'])) {
+			$event->data['script'] = [];
+		}
+
+		$event->data['script'][] = [
+			'type' => 'text/javascript',
+			'src' => DOKU_BASE . 'lib/plugins/pagesicon/script/upload-form.js',
+			'_data' => 'pagesicon-upload-form',
+		];
+	}
+
+	public function addFaviconRuntimeScript(Doku_Event $event): void {
+		global $ACT;
+
+		if (!(bool)$this->getConf('show_as_favicon')) return;
+		if ($ACT !== 'show') return;
+
+		if (!isset($event->data['script']) || !is_array($event->data['script'])) {
+			$event->data['script'] = [];
+		}
+
+		$event->data['script'][] = [
+			'type' => 'text/javascript',
+			'src' => DOKU_BASE . 'lib/plugins/pagesicon/script/favicon-runtime.js',
+			'_data' => 'pagesicon-favicon-runtime',
+		];
 	}
 
 	private function hasIconAlready(string $html, string $mediaID): bool {
 		return strpos($html, 'class="pagesicon-injected"') !== false;
 	}
 
-	private function getMediaVersionStamp(string $mediaID): string
-	{
-		$file = mediaFN($mediaID);
-		if (!@file_exists($file)) return '';
-		$mtime = @filemtime($file);
-		if (!$mtime) return '';
-		return (string)$mtime;
-	}
-
-	private function addVersionToUrl(string $url, string $version, bool $htmlEncodedAmp = true): string
-	{
-		if ($url === '' || $version === '') return $url;
-		$sep = strpos($url, '?') === false ? '?' : ($htmlEncodedAmp ? '&amp;' : '&');
-		return $url . $sep . 'pi_ts=' . rawurlencode($version);
-	}
-
-	private function injectFaviconRuntimeScript(string &$html, string $faviconHref): void
-	{
+	private function injectFaviconRuntimeScript(string &$html, string $faviconHref): void {
 		if ($faviconHref === '') return;
 
-		$href = json_encode($faviconHref);
-		$script = '<script>(function(){'
-			. 'var href=' . $href . ';'
-			. 'if(!href||!document.head)return;'
-			. 'var links=document.head.querySelectorAll(\'link[rel*="icon"]\');'
-			. 'for(var i=0;i<links.length;i++){links[i].parentNode.removeChild(links[i]);}'
-			. 'var icon=document.createElement("link");icon.rel="icon";icon.href=href;document.head.appendChild(icon);'
-			. 'var shortcut=document.createElement("link");shortcut.rel="shortcut icon";shortcut.href=href;document.head.appendChild(shortcut);'
-			. '})();</script>';
-
-		$html = $script . $html;
+		$marker = '<span class="pagesicon-favicon-runtime" data-href="' . hsc($faviconHref) . '" hidden></span>';
+		$html = $marker . $html;
 	}
 
-	private function getAllowedExtensions(): array
-	{
-		$raw = trim((string)$this->getConf('extensions'));
-		if ($raw === '') return ['svg', 'png', 'jpg', 'jpeg'];
-
-		$extensions = array_values(array_unique(array_filter(array_map(function ($ext) {
-			return strtolower(ltrim(trim((string)$ext), '.'));
-		}, explode(';', $raw)))));
-
-		return $extensions ?: ['svg', 'png', 'jpg', 'jpeg'];
-	}
-
-	private function canUploadToTarget(string $targetPage): bool
-	{
+	private function canUploadToTarget(string $targetPage): bool {
 		if ($targetPage === '') return false;
 		return auth_quickaclcheck($targetPage) >= AUTH_UPLOAD;
 	}
 
-	private function getDefaultTarget(): string
-	{
+	private function getDefaultTarget(): string {
 		global $ID;
 		return cleanID((string)$ID);
 	}
 
-	private function getDefaultVariant(): string
-	{
+	private function getDefaultVariant(): string {
 		global $INPUT;
 		$defaultVariant = strtolower($INPUT->str('icon_variant'));
 		if (!in_array($defaultVariant, ['big', 'small'], true)) {
@@ -172,84 +165,35 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		return $defaultVariant;
 	}
 
-	private function getVariantTemplates(string $variant): array
-	{
-		$raw = $variant === 'small'
-			? (string)$this->getConf('icon_thumbnail_name')
-			: (string)$this->getConf('icon_name');
-
-		$templates = array_values(array_unique(array_filter(array_map('trim', explode(';', $raw)))));
-		if (!$templates) {
-			return [$variant === 'small' ? 'thumbnail' : 'icon'];
-		}
-		return $templates;
-	}
-
-	private function normalizeBaseName(string $name): string
-	{
-		$name = trim($name);
-		if ($name === '') return '';
-		$name = noNS($name);
-		$name = preg_replace('/\.[a-z0-9]+$/i', '', $name);
-		$name = cleanID($name);
-		return str_replace(':', '', $name);
-	}
-
-	private function getUploadNameChoices(string $targetPage, string $variant): array
-	{
-		$pageID = noNS($targetPage);
-		$choices = [];
-
-		foreach ($this->getVariantTemplates($variant) as $tpl) {
-			$resolved = str_replace('~pagename~', $pageID, $tpl);
-			$base = $this->normalizeBaseName($resolved);
-			if ($base === '') continue;
-			$choices[$base] = $base . '.ext';
-		}
-
-		if (!$choices) {
-			$fallback = $variant === 'small' ? 'thumbnail' : 'icon';
-			$choices[$fallback] = $fallback . '.ext';
-		}
-
-		return $choices;
-	}
-
-	private function getPostedBaseName(array $choices): string
-	{
+	private function getPostedBaseName(array $choices): string {
 		global $INPUT;
-		$selected = $this->normalizeBaseName($INPUT->post->str('icon_filename'));
+		/** @var helper_plugin_pagesicon|null $helper */
+		$helper = plugin_load('helper', 'pagesicon');
+		$selected = $helper ? $helper->normalizeIconBaseName($INPUT->post->str('icon_filename')) : '';
 		if ($selected !== '' && isset($choices[$selected])) return $selected;
 		return (string)array_key_first($choices);
 	}
 
-	private function getMediaManagerUrl(string $targetPage): string
-	{
+	private function getMediaManagerUrl(string $targetPage): string {
 		$namespace = getNS($targetPage);
-		return DOKU_BASE . 'lib/exe/mediamanager.php?ns=' . rawurlencode($namespace);
+		return DOKU_MEDIAMANAGER_URL_BASE . '?ns=' . rawurlencode($namespace);
 	}
 
-	private function notifyIconUpdated(string $targetPage, string $action, string $mediaID = ''): void
-	{
-		/** @var helper_plugin_pagesicon|null $helper */
-		$helper = plugin_load('helper', 'pagesicon');
-		if ($helper && method_exists($helper, 'notifyIconUpdated')) {
-			$helper->notifyIconUpdated($targetPage, $action, $mediaID);
-			return;
-		}
-
-		global $conf;
-		@io_saveFile($conf['cachedir'] . '/purgefile', time());
-		$data = [
-			'target_page' => cleanID($targetPage),
-			'action' => $action,
-			'media_id' => cleanID($mediaID),
-		];
-		\dokuwiki\Extension\Event::createAndTrigger('PLUGIN_PAGESICON_UPDATED', $data);
+	private function renderCurrentIconPreview(string $mediaID, string $defaultTarget, string $actionPage, int $previewSize): void {
+		echo '<a href="' . hsc($this->getMediaManagerUrl($defaultTarget)) . '" target="_blank" title="' . hsc($this->getLang('open_media_manager')) . '">';
+		echo '<img src="' . ml($mediaID, ['w' => $previewSize]) . '" alt="" width="' . $previewSize . '" style="display:block;margin:6px 0;" />';
+		echo '</a>';
+		echo '<small>' . hsc(noNS($mediaID)) . '</small>';
+		echo '<form action="' . wl($actionPage) . '" method="post" style="margin-top:6px;">';
+		formSecurityToken();
+		echo '<input type="hidden" name="do" value="pagesicon" />';
+		echo '<input type="hidden" name="media_id" value="' . hsc($mediaID) . '" />';
+		echo '<input type="hidden" name="pagesicon_delete_submit" value="1" />';
+		echo '<button type="submit" class="button">' . hsc($this->getLang('delete_icon')) . '</button>';
+		echo '</form>';
 	}
 
-	private function handleDeletePost(): void
-	{
+	private function handleDeletePost(): void {
 		global $INPUT, $ID;
 
 		if (!$INPUT->post->has('pagesicon_delete_submit')) return;
@@ -269,8 +213,8 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		$namespace = getNS($targetPage);
 		$pageID = noNS($targetPage);
 		$helper = plugin_load('helper', 'pagesicon');
-		$currentBig = ($helper && method_exists($helper, 'getPageImage')) ? (string)$helper->getPageImage($namespace, $pageID, 'big') : '';
-		$currentSmall = ($helper && method_exists($helper, 'getPageImage')) ? (string)$helper->getPageImage($namespace, $pageID, 'small') : '';
+		$currentBig = ($helper && method_exists($helper, 'getPageIconId')) ? (string)$helper->getPageIconId($namespace, $pageID, 'big') : '';
+		$currentSmall = ($helper && method_exists($helper, 'getPageIconId')) ? (string)$helper->getPageIconId($namespace, $pageID, 'small') : '';
 		$allowed = array_values(array_filter(array_unique([$currentBig, $currentSmall])));
 		if (!$allowed || !in_array($mediaID, $allowed, true)) {
 			msg($this->getLang('error_delete_invalid'), -1);
@@ -287,13 +231,14 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 			return;
 		}
 
-		$this->notifyIconUpdated($targetPage, 'delete', $mediaID);
+		if ($helper) {
+			$helper->notifyIconUpdated($targetPage, 'delete', $mediaID);
+		}
 		msg(sprintf($this->getLang('delete_success'), hsc($mediaID)), 1);
 	}
 
-	private function handleUploadPost(): void
-	{
-		global $INPUT, $ID;
+	private function handleUploadPost(): void {
+		global $INPUT, $ID, $conf;
 
 		if (!$INPUT->post->has('pagesicon_upload_submit')) return;
 		if (!checkSecurityToken()) return;
@@ -333,13 +278,18 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 			return;
 		}
 
-		$allowed = $this->getAllowedExtensions();
+		$helper = plugin_load('helper', 'pagesicon');
+		$allowed = ($helper && method_exists($helper, 'getConfiguredExtensions'))
+			? $helper->getConfiguredExtensions()
+			: [];
 		if (!in_array($ext, $allowed, true)) {
 			msg(sprintf($this->getLang('error_extension_not_allowed'), hsc($ext), hsc(implode(', ', $allowed))), -1);
 			return;
 		}
 
-		$choices = $this->getUploadNameChoices($targetPage, $variant);
+		$choices = ($helper && method_exists($helper, 'getUploadNameChoices'))
+			? $helper->getUploadNameChoices($targetPage, $variant)
+			: [];
 		$base = $this->getPostedBaseName($choices);
 		$namespace = getNS($targetPage);
 		$mediaBase = $namespace !== '' ? ($namespace . ':' . $base) : $base;
@@ -361,32 +311,36 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 			return;
 		}
 
-		@chmod($targetFile, 0664);
-		$this->notifyIconUpdated($targetPage, 'upload', $mediaID);
+		@chmod($targetFile, $conf['fmode']);
+		if ($helper) {
+			$helper->notifyIconUpdated($targetPage, 'upload', $mediaID);
+		}
 		msg(sprintf($this->getLang('upload_success'), hsc($mediaID)), 1);
 	}
 
-	private function renderUploadForm(): void
-	{
+	private function renderUploadForm(): void {
 		global $ID, $INPUT;
 
 		$defaultTarget = $this->getDefaultTarget();
 		$defaultVariant = $this->getDefaultVariant();
-		$allowed = implode(', ', $this->getAllowedExtensions());
-		$currentChoices = $this->getUploadNameChoices($defaultTarget, $defaultVariant);
-		$selectedBase = $this->normalizeBaseName($INPUT->str('icon_filename'));
+		$helper = plugin_load('helper', 'pagesicon');
+		$allowed = ($helper && method_exists($helper, 'getConfiguredExtensions'))
+			? implode(', ', $helper->getConfiguredExtensions())
+			: '';
+		$currentChoices = ($helper && method_exists($helper, 'getUploadNameChoices'))
+			? $helper->getUploadNameChoices($defaultTarget, $defaultVariant)
+			: [];
+		$selectedBase = $helper ? $helper->normalizeIconBaseName($INPUT->str('icon_filename')) : '';
 		if (!isset($currentChoices[$selectedBase])) {
 			$selectedBase = (string)array_key_first($currentChoices);
 		}
-		$bigTemplates = json_encode($this->getVariantTemplates('big'));
-		$smallTemplates = json_encode($this->getVariantTemplates('small'));
 		$filenameHelp = hsc($this->getLang('icon_filename_help'));
 		$actionPage = $defaultTarget !== '' ? $defaultTarget : cleanID((string)$ID);
 		$namespace = getNS($defaultTarget);
 		$pageID = noNS($defaultTarget);
-		$helper = plugin_load('helper', 'pagesicon');
-		$currentBig = ($helper && method_exists($helper, 'getPageImage')) ? $helper->getPageImage($namespace, $pageID, 'big') : false;
-		$currentSmall = ($helper && method_exists($helper, 'getPageImage')) ? $helper->getPageImage($namespace, $pageID, 'small') : false;
+		$previewSize = $this->getIconSize();
+		$currentBig = ($helper && method_exists($helper, 'getPageIconId')) ? $helper->getPageIconId($namespace, $pageID, 'big') : false;
+		$currentSmall = ($helper && method_exists($helper, 'getPageIconId')) ? $helper->getPageIconId($namespace, $pageID, 'small') : false;
 
 		echo '<h1>' . hsc($this->getLang('menu')) . '</h1>';
 		echo '<p>' . hsc($this->getLang('intro')) . '</p>';
@@ -395,17 +349,7 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		echo '<div class="pagesicon-current-item">';
 		echo '<strong>' . hsc($this->getLang('current_big_icon')) . '</strong><br />';
 		if ($currentBig) {
-			echo '<a href="' . hsc($this->getMediaManagerUrl($defaultTarget)) . '" target="_blank" title="' . hsc($this->getLang('open_media_manager')) . '">';
-			echo '<img src="' . ml($currentBig, ['w' => 55]) . '" alt="" width="55" style="display:block;margin:6px 0;" />';
-			echo '</a>';
-			echo '<small>' . hsc(noNS($currentBig)) . '</small>';
-			echo '<form action="' . wl($actionPage) . '" method="post" style="margin-top:6px;">';
-			formSecurityToken();
-			echo '<input type="hidden" name="do" value="pagesicon" />';
-			echo '<input type="hidden" name="media_id" value="' . hsc($currentBig) . '" />';
-			echo '<input type="hidden" name="pagesicon_delete_submit" value="1" />';
-			echo '<button type="submit" class="button">' . hsc($this->getLang('delete_icon')) . '</button>';
-			echo '</form>';
+			$this->renderCurrentIconPreview($currentBig, $defaultTarget, $actionPage, $previewSize);
 		} else {
 			echo '<small>' . hsc($this->getLang('current_icon_none')) . '</small>';
 		}
@@ -413,24 +357,18 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		echo '<div class="pagesicon-current-item">';
 		echo '<strong>' . hsc($this->getLang('current_small_icon')) . '</strong><br />';
 		if ($currentSmall) {
-			echo '<a href="' . hsc($this->getMediaManagerUrl($defaultTarget)) . '" target="_blank" title="' . hsc($this->getLang('open_media_manager')) . '">';
-			echo '<img src="' . ml($currentSmall, ['w' => 55]) . '" alt="" width="55" style="display:block;margin:6px 0;" />';
-			echo '</a>';
-			echo '<small>' . hsc(noNS($currentSmall)) . '</small>';
-			echo '<form action="' . wl($actionPage) . '" method="post" style="margin-top:6px;">';
-			formSecurityToken();
-			echo '<input type="hidden" name="do" value="pagesicon" />';
-			echo '<input type="hidden" name="media_id" value="' . hsc($currentSmall) . '" />';
-			echo '<input type="hidden" name="pagesicon_delete_submit" value="1" />';
-			echo '<button type="submit" class="button">' . hsc($this->getLang('delete_icon')) . '</button>';
-			echo '</form>';
+			$this->renderCurrentIconPreview($currentSmall, $defaultTarget, $actionPage, $previewSize);
 		} else {
 			echo '<small>' . hsc($this->getLang('current_icon_none')) . '</small>';
 		}
 		echo '</div>';
 		echo '</div>';
 
-		echo '<form action="' . wl($actionPage) . '" method="post" enctype="multipart/form-data">';
+		echo '<form action="' . wl($actionPage) . '" method="post" enctype="multipart/form-data"'
+			. ' class="pagesicon-upload-form"'
+			. ' data-page-name="' . hsc(noNS($defaultTarget)) . '"'
+			. ' data-big-templates="' . hsc(json_encode($helper ? $helper->getVariantTemplates('big') : [])) . '"'
+			. ' data-small-templates="' . hsc(json_encode($helper ? $helper->getVariantTemplates('small') : [])) . '">';
 		formSecurityToken();
 		echo '<input type="hidden" name="do" value="pagesicon" />';
 		echo '<input type="hidden" name="pagesicon_upload_submit" value="1" />';
@@ -454,48 +392,23 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		echo '<tr>';
 		echo '<td class="label"><label for="pagesicon_icon_filename">' . hsc($this->getLang('icon_filename')) . '</label></td>';
 		echo '<td>';
-		echo '<select id="pagesicon_icon_filename" name="icon_filename" class="edit">';
-		foreach ($currentChoices as $value => $label) {
-			$selected = $value === $selectedBase ? ' selected="selected"' : '';
-			echo '<option value="' . hsc($value) . '"' . $selected . '>' . hsc($label) . '</option>';
+		if ($currentChoices) {
+			echo '<select id="pagesicon_icon_filename" name="icon_filename" class="edit">';
+			foreach ($currentChoices as $value => $label) {
+				$selected = $value === $selectedBase ? ' selected="selected"' : '';
+				echo '<option value="' . hsc($value) . '"' . $selected . '>' . hsc($label) . '</option>';
+			}
+			echo '</select>';
+			echo '<br /><small>' . $filenameHelp . '</small>';
+		} else {
+			echo '<span class="error">' . hsc($this->getLang('error_no_filename_choices')) . '</span>';
 		}
-		echo '</select>';
-		echo '<br /><small>' . $filenameHelp . '</small>';
 		echo '</td>';
 		echo '</tr>';
 		echo '</table></div>';
 
 		echo '<p><button type="submit" class="button">' . hsc($this->getLang('upload_button')) . '</button></p>';
 		echo '</form>';
-
-		echo '<script>(function(){'
-			. 'var variant=document.getElementById("pagesicon_icon_variant");'
-			. 'var filename=document.getElementById("pagesicon_icon_filename");'
-			. 'if(!variant||!filename)return;'
-			. 'var pageName=' . json_encode(noNS($defaultTarget)) . ';'
-			. 'var templates={big:' . $bigTemplates . ',small:' . $smallTemplates . '};'
-			. 'function cleanBase(name){name=(name||"").trim();if(!name)return"";'
-			. 'var parts=name.split(":");name=parts[parts.length-1]||"";'
-			. 'name=name.replace(/\\.[a-z0-9]+$/i,"");'
-			. 'name=name.replace(/[^a-zA-Z0-9_\\-]/g,"_").replace(/^_+|_+$/g,"");'
-			. 'return name;}'
-			. 'function updateChoices(){'
-			. 'var selected=filename.value;filename.innerHTML="";'
-			. 'var variantKey=(variant.value==="small")?"small":"big";'
-			. 'var seen={};'
-			. '(templates[variantKey]||[]).forEach(function(tpl){'
-			. 'var resolved=String(tpl||"").replace(/~pagename~/g,pageName);'
-			. 'var base=cleanBase(resolved);if(!base||seen[base])return;seen[base]=true;'
-			. 'var opt=document.createElement("option");opt.value=base;opt.textContent=base+".ext";filename.appendChild(opt);'
-			. '});'
-			. 'if(!filename.options.length){var fb=variantKey==="small"?"thumbnail":"icon";'
-			. 'var o=document.createElement("option");o.value=fb;o.textContent=fb+".ext";filename.appendChild(o);}'
-			. 'for(var i=0;i<filename.options.length;i++){if(filename.options[i].value===selected){filename.selectedIndex=i;return;}}'
-			. 'filename.selectedIndex=0;'
-			. '}'
-			. 'variant.addEventListener("change",updateChoices);'
-			. 'updateChoices();'
-			. '})();</script>';
 	}
 		
     public function _displaypageicon(Doku_Event &$event, $param) {
@@ -505,7 +418,7 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		if(!(bool)$this->getConf('show_on_top')) return;
 
 		$pageID = noNS($ID);
-		if($pageID === 'sidebar' || $pageID === 'footer') return;
+		if($this->isLayoutIncludePage($pageID)) return;
 
 		$namespace = getNS($ID);
 		$pageID = noNS((string)$ID);
@@ -513,18 +426,16 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		$helper = plugin_load('helper', 'pagesicon');
 		if(!$helper) return;
 		$sizeMode = $this->getIconSize() > 35 ? 'bigorsmall' : 'smallorbig';
-		$logoMediaID = $helper->getPageImage($namespace, $pageID, $sizeMode);
+		$logoMediaID = $helper->getPageIconId($namespace, $pageID, $sizeMode);
 		if(!$logoMediaID) return;
 		if($this->hasIconAlready($event->data, $logoMediaID)) return;
 
 		$size = $this->getIconSize();
-		$src = (string)ml($logoMediaID, ['w' => $size]);
-		$src = $this->addVersionToUrl($src, $this->getMediaVersionStamp($logoMediaID), true);
+		$src = $helper->getPageIconUrl($namespace, $pageID, $sizeMode, ['w' => $size]);
 		if(!$src) return;
 		$iconHtml = '<img src="' . $src . '" class="media pagesicon-image" loading="lazy" alt="" width="' . $size . '" />';
 		if ((bool)$this->getConf('show_as_favicon')) {
-			$favicon = html_entity_decode((string)ml($logoMediaID, ['w' => 32]), ENT_QUOTES | ENT_HTML5, 'UTF-8');
-			$favicon = $this->addVersionToUrl($favicon, $this->getMediaVersionStamp($logoMediaID), false);
+			$favicon = $helper->getPageIconUrl($namespace, $pageID, $sizeMode, ['w' => 32]);
 			$this->injectFaviconRuntimeScript($event->data, $favicon);
 		}
 
@@ -539,14 +450,12 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		$event->data = '<div class="pagesicon-injected">' . $iconHtml . '</div>' . "\n" . $event->data;
 	}
 
-	public function handleAction(Doku_Event $event): void
-	{
+	public function handleAction(Doku_Event $event): void {
 		if ($event->data !== 'pagesicon') return;
 		$event->preventDefault();
 	}
 
-	public function renderAction(Doku_Event $event): void
-	{
+	public function renderAction(Doku_Event $event): void {
 		global $ACT;
 		if ($ACT !== 'pagesicon') return;
 

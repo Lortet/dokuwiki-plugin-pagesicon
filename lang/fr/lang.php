@@ -33,5 +33,6 @@ $lang['error_delete_not_found'] = 'Suppression impossible: fichier introuvable.'
 $lang['error_delete_failed'] = 'Suppression impossible: echec lors de la suppression du fichier.';
 $lang['error_extension_missing'] = 'Extension de fichier manquante.';
 $lang['error_extension_not_allowed'] = 'L\'extension "%s" n\'est pas autorisee. Autorisees : %s';
+$lang['error_no_filename_choices'] = 'Aucun nom de fichier cible disponible. Verifiez la configuration des noms d\'icones.';
 $lang['error_write_dir'] = 'Impossible de creer le dossier cible.';
 $lang['error_write_file'] = 'Impossible d\'ecrire le fichier importe.';

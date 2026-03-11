@@ -3,45 +3,32 @@
 I really like DokuWiki, but I always found it a bit sad: there was no simple way to add nice icons to pages.  
 With **pagesicon**, this is now possible.
 
-`pagesicon` is both:
-- a **plugin** (icon display and management),
-- a **helper** (reusable API for other plugins like `catmenu` and `visualindex`).
-
-## What the plugin does
-
-- Displays an icon at the top of the page (`show`), when enabled.
-- Can use the page icon as browser tab favicon (`show_as_favicon`).
-- Provides a per-page icon management page: `?do=pagesicon`.
-- Supports `big` and `small` icon variants.
-- Notifies other plugins when an icon changes through `PLUGIN_PAGESICON_UPDATED` (for cache invalidation on consumer plugins).
-
-## Configuration
-
-In the `Configuration Manager`:
-
-- `icon_name`: candidate names for the `big` icon (separated by `;`).  
-  Supports `~pagename~`.
-
-- `icon_thumbnail_name`: candidate names for the `small` icon (separated by `;`).  
-  Supports `~pagename~`.
-
-- `default_image`: default image (media ID) used only when helper API fallback is explicitly enabled.
-
-- `icon_size`: size (px) of the icon shown at the top of pages.
-
-- `extensions`: allowed file extensions (separated by `;`), for example `svg;png;jpg;jpeg`.
-
-- `show_on_top`: enable/disable icon display at the top of pages.
-
-- `show_as_favicon`: use the page icon as favicon.
+The plugin can:
+- display an icon at the top of the page (`show`);
+- use this icon as the browser tab favicon (`show_as_favicon`);
+- provide an icon management page with `?do=pagesicon`;
+- handle `big` and `small` variants depending on the context;
+- expose a helper (reusable API) for other plugins.
 
 ## Usage
 
-From a page, use the `Gérer l'icône` action, then upload/delete.
+From a page, use the `Manage icon` action to:
+- upload a `big` icon;
+- upload a `small` icon;
+- delete the current icon.
 
-The plugin works on the **current page** (`$ID`), not on an external target parameter.
+## Configuration
 
-## Helper API
+In the configuration manager:
+- `icon_name`: candidate filenames for the `big` icon, separated by `;`, with support for `~pagename~`
+- `icon_thumbnail_name`: candidate filenames for the `small` icon, separated by `;`, with support for `~pagename~`
+- `default_image`: default image used only when a helper method explicitly asks for a fallback
+- `icon_size`: size of the icon displayed at the top of the page
+- `extensions`: allowed extensions, for example `svg;png;jpg;jpeg`
+- `show_on_top`: displays the icon in the page
+- `show_as_favicon`: uses the icon as favicon
+
+## What the helper provides
 
 Load helper:
 
@@ -49,63 +36,19 @@ Load helper:
 $pagesicon = plugin_load('helper', 'pagesicon');
 ```
 
-### mediaID Resolution
+Main methods:
 
-- `getPageIconId(string $namespace, string $pageID, string $size = 'bigorsmall')`  
-  Returns a mediaID (`ns:file.ext`) or `false`.
+- `getPageIconId()`: returns the media ID of a page icon
+- `getMediaIconId()`: returns the media ID of the icon associated with a media file
+- `getPageIconUrl()`: returns the versioned URL of a page icon
+- `getMediaIconUrl()`: returns the versioned URL of the icon associated with a media file
+- `getDefaultIconUrl()`: returns the URL of the default image to use when no icon is found
+- `getUploadIconPage()`: returns the icon management URL for a page
+- `getUploadMediaIconPage()`: returns the icon management URL for a media file
+- `notifyIconUpdated()`: notifies other plugins that an icon changed
 
-- `getMediaIconId(string $mediaID, string $size = 'bigorsmall')`  
-  Returns the icon mediaID for a media item, or `false`.
+## Cache and integrations
 
-`size` supports: `big`, `small`, `bigorsmall`, `smallorbig`.
+When an icon is modified, the plugin triggers the `PLUGIN_PAGESICON_UPDATED` event.
 
-### Versioned URL Resolution
-
-- `getPageIconUrl(string $namespace, string $pageID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null, bool $withDefault = false)`  
-  Returns an icon URL (with `pi_ts=<filemtime>`) or `false`.  
-  Also fills `$mtime`.
-
-- `getMediaIconUrl(string $mediaID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null, bool $withDefault = false)`  
-  Returns a media icon URL (with `pi_ts=<filemtime>`) or `false`.  
-  Also fills `$mtime`.
-
-- `getDefaultIconUrl(array $params = ['width' => 55], ?int &$mtime = null)`  
-  Returns the configured default image URL, or `false`.
-
-### Management URLs
-
-- `getUploadIconPage(string $targetPage = '')`  
-  Returns the page URL with `?do=pagesicon`, or `null` when not authorized.
-
-- `getUploadMediaIconPage(string $mediaID = '')`  
-  Returns the icon management URL associated with a media item.
-
-### Notification
-
-- `notifyIconUpdated(string $targetPage, string $action = 'update', string $mediaID = '')`
-
-Effects:
-- updates `purgefile`,
-- triggers `PLUGIN_PAGESICON_UPDATED`.
-
-Payload:
-- `target_page`,
-- `action`,
-- `media_id`.
-
-Each consumer plugin remains responsible for its own cache invalidation strategy.
-
-## Signature compatibility
-
-- Before `09-03-2025`:
-  - `getPageImage(string $namespace, string $pageID, string $size = 'bigorsmall')`
-  - `getMediaImage(string $mediaID, string $size = 'bigorsmall')`
-  - `getImageIcon(string $namespace, string $pageID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null)`
-  - `getMediaIcon(string $mediaID, string $size = 'bigorsmall', array $params = ['width' => 55], ?int &$mtime = null)`
-
-Compatibility is preserved through legacy aliases:
-- `getPageImage(...)` -> `getPageIconId(...)` (legacy `$withDefault` argument is ignored)
-- `getMediaImage(...)` -> `getMediaIconId(...)` (legacy `$withDefault` argument is ignored)
-- `getImageIcon(...)` -> `getPageIconUrl(...)`
-- `getMediaIcon(...)` -> `getMediaIconUrl(...)`
-- `getDefaultImageIcon(...)` -> `getDefaultIconUrl(...)`
+This allows other plugins to refresh or invalidate their own cache when needed.

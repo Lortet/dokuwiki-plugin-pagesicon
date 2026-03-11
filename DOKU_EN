@@ -1,0 +1,123 @@
+====== Pagesicon Plugin ======
+
+---- plugin ----
+description: Manage and expose page and media icons
+author     : Valentin LORTET
+email      : contact@valentinlortet.fr
+type       : Action, Helper
+lastupdate : 2026-03-11
+compatible : Librarian
+depends    :
+conflicts  :
+similar    :
+tags       : Media, UI, Navigation, Helper, Icons
+
+downloadurl: https://github.com/Lortet/dokuwiki-plugin-pagesicon/zipball/master
+bugtracker : https://github.com/Lortet/dokuwiki-plugin-pagesicon/issues
+sourcerepo : https://github.com/Lortet/dokuwiki-plugin-pagesicon/
+donationurl:
+screenshot_img :
+----
+
+===== Installation =====
+
+Install the plugin from the [[plugin:extension|Extension Manager]] using the URL above, or copy it into ''lib/plugins/pagesicon''.
+
+===== Description =====
+
+The **pagesicon** plugin can:
+  * display an icon at the top of the page;
+  * use this icon as the page favicon;
+  * manage icons from the page action ''?do=pagesicon'';
+  * handle two variants: ''big'' and ''small'';
+  * expose a helper API for other plugins.
+
+The plugin works on the current page. There is no external target to fill in on the management screen.
+
+===== Settings =====
+
+^ Name ^ Description ^ Default value ^
+| icon_name | Candidate names for the ''big'' icon (separated by '';''). Supports ''~pagename~''. | ''~pagename~;icon_thumbnail;icon'' |
+| icon_thumbnail_name | Candidate names for the ''small'' icon (separated by '';''). Supports ''~pagename~''. | ''~pagename~;icon'' |
+| default_image | Default image (mediaID), used only when a helper method explicitly asks for a fallback. | '''' |
+| icon_size | Size of the icon displayed at the top of the page (px). | ''55'' |
+| extensions | Allowed image extensions (separated by '';''). | ''svg;png;jpg;jpeg'' |
+| show_on_top | Show the icon at the top of the page. | ''true'' |
+| show_as_favicon | Use the icon as favicon. | ''true'' |
+
+===== Usage =====
+
+From a page, use the **Manage icon** action, then:
+  * upload a ''big'' icon;
+  * upload a ''small'' icon;
+  * delete the current icon.
+
+The form:
+  * computes the allowed target filenames from the configuration;
+  * limits uploads to the configured extensions;
+  * opens the media manager on the page namespace.
+
+===== Helper API =====
+
+Load helper:
+''$pagesicon = plugin_load('helper', 'pagesicon');''
+
+==== Main methods ====
+
+^ Method ^ Since ^ Description ^
+| ''getPageIconId($namespace, $pageID, $size = "bigorsmall")'' | ''2026-03-09'' | Returns the mediaID of a page icon, or ''false''. |
+| ''getMediaIconId($mediaID, $size = "bigorsmall")'' | ''2026-03-09'' | Returns the mediaID of the icon associated with a media file, or ''false''. |
+| ''getPageIconUrl($namespace, $pageID, $size = "bigorsmall", $params = ['width' => 55], &$mtime = null, $withDefault = false)'' | ''2026-03-09'' | Returns the versioned URL of a page icon, or ''false''. |
+| ''getMediaIconUrl($mediaID, $size = "bigorsmall", $params = ['width' => 55], &$mtime = null, $withDefault = false)'' | ''2026-03-09'' | Returns the versioned URL of the icon associated with a media file, or ''false''. |
+| ''getDefaultIconUrl($params = ['width' => 55], &$mtime = null)'' | ''2026-03-09'' | Returns the default image to use when no icon is found. |
+| ''getUploadIconPage($targetPage = "")'' | ''2026-03-06'' | Returns the ''?do=pagesicon'' URL for a page, or ''null'' when unauthorized. |
+| ''getUploadMediaIconPage($mediaID = "")'' | ''2026-03-06'' | Returns the icon management URL associated with a media file. |
+| ''notifyIconUpdated($targetPage, $action = "update", $mediaID = "")'' | ''2026-03-06'' | Triggers the cache invalidation event. |
+| ''isPageIconMedia($mediaID)'' | ''2026-03-11'' | Tells whether a media file should be considered an icon managed by the plugin. |
+
+==== Public utility methods ====
+
+These methods are a bit more technical, but useful when another plugin wants to reuse the exact naming and configuration logic of ''pagesicon''.
+
+^ Method ^ Since ^ Description ^
+| ''getConfiguredExtensions()'' | ''2026-03-11'' | Returns the configured list of allowed extensions. |
+| ''getVariantTemplates($variant)'' | ''2026-03-11'' | Returns the configured filename templates for ''big'' or ''small''. |
+| ''normalizeIconBaseName($name)'' | ''2026-03-11'' | Normalizes an icon filename without namespace or extension. |
+| ''getUploadNameChoices($targetPage, $variant)'' | ''2026-03-11'' | Returns the allowed target names for an upload. |
+
+===== Event =====
+
+On upload or deletion, the plugin emits:
+  * ''PLUGIN_PAGESICON_UPDATED''
+
+Payload:
+  * ''target_page''
+  * ''action''
+  * ''media_id''
+
+Consumer plugins remain responsible for their own cache invalidation.
+
+===== Compatibility =====
+
+Older API signatures are still available through legacy aliases.
+
+^ Historical alias ^ Added ^ Deprecated ^ Replacement ^
+| ''getPageImage(...)'' | ''2026-03-06'' | ''2026-03-09'' | ''getPageIconId(...)'' |
+| ''getMediaImage(...)'' | ''2026-03-06'' | ''2026-03-09'' | ''getMediaIconId(...)'' |
+| ''getImageIcon(...)'' | ''2026-03-06'' | ''2026-03-09'' | ''getPageIconUrl(...)'' |
+| ''getMediaIcon(...)'' | ''2026-03-06'' | ''2026-03-09'' | ''getMediaIconUrl(...)'' |
+| ''getDefaultImageIcon(...)'' | ''2026-03-09'' | ''2026-03-09'' | ''getDefaultIconUrl(...)'' |
+
+===== How it works =====
+
+Icon resolution follows the configured order:
+  * configured names for the requested variant;
+  * ''~pagename~'' replacements;
+  * historical plugin fallbacks such as ''logo'' and ''thumbnail''.
+
+The URLs returned by the helper are versioned with a ''pi_ts'' parameter based on the media ''filemtime''.
+
+===== Notes =====
+
+  * The plugin ignores technical pages such as ''sidebar'' and ''footer'' during icon/favicon injection, to avoid a layout include replacing the current page icon.
+  * The management screen uses the current plugin configuration. If a required configuration is empty or invalid, the plugin emits a PHP warning and does not invent fallback values.

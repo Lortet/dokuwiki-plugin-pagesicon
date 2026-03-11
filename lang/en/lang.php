@@ -33,5 +33,6 @@ $lang['error_delete_not_found'] = 'Unable to delete: file not found.';
 $lang['error_delete_failed'] = 'Unable to delete: file deletion failed.';
 $lang['error_extension_missing'] = 'Missing file extension.';
 $lang['error_extension_not_allowed'] = 'Extension "%s" is not allowed. Allowed: %s';
+$lang['error_no_filename_choices'] = 'No target filename is available. Check the icon naming configuration.';
 $lang['error_write_dir'] = 'Unable to create target directory.';
 $lang['error_write_file'] = 'Unable to write uploaded file.';
