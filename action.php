@@ -87,6 +87,7 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		$namespace = getNS((string)$ID);
 		$favicon = $helper->getPageIconUrl($namespace, $pageID, 'smallorbig', ['w' => 32]);
 		if (!$favicon) return;
+		$favicon = html_entity_decode((string)$favicon, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
 		if (!isset($event->data['link']) || !is_array($event->data['link'])) {
 			$event->data['link'] = [];
@@ -154,6 +155,7 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 
 	private function injectFaviconRuntimeScript(string &$html, string $faviconHref): void {
 		if ($faviconHref === '') return;
+		$faviconHref = html_entity_decode($faviconHref, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
 		$marker = '<span class="pagesicon-favicon-runtime" data-href="' . hsc($faviconHref) . '" hidden></span>';
 		$html = $marker . $html;
