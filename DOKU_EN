@@ -5,7 +5,7 @@ description: Manage and expose page and media icons
 author     : Valentin LORTET
 email      : contact@valentinlortet.fr
 type       : Action, Helper
-lastupdate : 2026-03-11
+lastupdate : 2026-03-12
 compatible : Librarian
 depends    :
 conflicts  :
@@ -44,6 +44,7 @@ The plugin works on the current page. There is no external target to fill in on 
 | extensions | Allowed image extensions (separated by '';''). | ''svg;png;jpg;jpeg'' |
 | show_on_top | Show the icon at the top of the page. | ''true'' |
 | show_as_favicon | Use the icon as favicon. | ''true'' |
+| parent_fallback | Fallback inheritance policy when the page has no icon: none, direct parent, or first icon found while walking up parent namespaces. | ''none'' |
 
 ===== Usage =====
 
@@ -114,6 +115,11 @@ Icon resolution follows the configured order:
   * configured names for the requested variant;
   * ''~pagename~'' replacements;
   * historical plugin fallbacks such as ''logo'' and ''thumbnail''.
+
+If no icon is found on the page itself, the plugin can also inherit:
+  * no icon;
+  * the direct parent icon;
+  * the first icon found while walking up parent namespaces.
 
 The URLs returned by the helper are versioned with a ''pi_ts'' parameter based on the media ''filemtime''.
 

@@ -1,7 +1,7 @@
 base   pagesicon
 author Valentin LORTET
 email  contact@valentinlortet.fr
-date   2026-03-11
+date   2026-03-12
 name   Pages Icon
 desc   Manage and expose page/media icons
 url    https://www.dokuwiki.org/plugin:pagesicon

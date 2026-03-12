@@ -27,6 +27,7 @@ In the configuration manager:
 - `extensions`: allowed extensions, for example `svg;png;jpg;jpeg`
 - `show_on_top`: displays the icon in the page
 - `show_as_favicon`: uses the icon as favicon
+- `parent_fallback`: allows using a parent icon when the page has none
 
 ## What the helper provides
 
@@ -52,3 +53,10 @@ Main methods:
 When an icon is modified, the plugin triggers the `PLUGIN_PAGESICON_UPDATED` event.
 
 This allows other plugins to refresh or invalidate their own cache when needed.
+
+## Icon inheritance
+
+If no icon is found on the page itself, the plugin can also:
+- inherit no icon;
+- use the direct parent icon;
+- use the first icon found while walking up parent namespaces.

@@ -6,3 +6,7 @@ $lang['icon_size']           = 'Icon size (px)';
 $lang['extensions']          = 'Image extensions (separated by ;)';
 $lang['show_on_top']         = 'Show icon at top of page';
 $lang['show_as_favicon']     = 'Use icon as page favicon';
+$lang['parent_fallback']     = 'Icon to use when none is found on the page';
+$lang['parent_fallback_o_none'] = 'Do not use the parent icon';
+$lang['parent_fallback_o_direct'] = 'Use the direct parent icon';
+$lang['parent_fallback_o_first'] = 'Use the first parent icon';

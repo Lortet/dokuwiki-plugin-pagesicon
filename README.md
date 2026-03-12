@@ -27,6 +27,7 @@ Dans le gestionnaire de configuration :
 - `extensions` : extensions autorisées, par exemple `svg;png;jpg;jpeg`
 - `show_on_top` : affiche l'icône dans la page
 - `show_as_favicon` : utilise l'icône comme favicon
+- `parent_fallback` : permet d'utiliser l'icône du parent si la page n'en a pas
 
 ## Ce que le helper fournit
 
@@ -52,3 +53,10 @@ Methodes principales :
 Quand une icône est modifiée, le plugin déclenche l'événement `PLUGIN_PAGESICON_UPDATED`.
 
 Cela permet aux autres plugins de recharger ou invalider leur propre cache si besoin.
+
+## Héritage d'icône
+
+Si aucune icône n'est trouvée sur la page, le plugin peut aussi :
+- ne rien hériter ;
+- utiliser l'icône du parent direct ;
+- utiliser la première icône trouvée en remontant les parents.

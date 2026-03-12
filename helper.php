@@ -176,19 +176,13 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         return $fileExt !== '' && in_array($fileExt, $extensions, true);
     }
 
-    /**
-     * Added in version 2026-03-09.
-     * Resolves the icon media ID for a page, or false when no icon matches.
-     * Replaces the older getPageImage() name.
-     */
-    public function getPageIconId(
-        string $namespace,
-        string $pageID,
-        string $size = 'bigorsmall'
-    )
-    {
-        $sizeMode = $this->normalizeSizeMode($size);
-        $extensions = $this->getConfiguredExtensions();
+    private function getParentFallbackMode(): string {
+        $mode = strtolower(trim((string)$this->getConf('parent_fallback')));
+        if ($mode !== 'direct' && $mode !== 'first') return 'none';
+        return $mode;
+    }
+
+    private function resolveOwnPageIconId(string $namespace, string $pageID, string $sizeMode, array $extensions) {
         $namespace = $namespace ?: '';
         $pageBase = $namespace ? ($namespace . ':' . $pageID) : $pageID;
         $nsBase = $namespace ? ($namespace . ':') : '';
@@ -225,6 +219,67 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
                 $path = $name . '.' . $ext;
                 if (@file_exists(mediaFN($path))) return $path;
             }
+        }
+
+        return false;
+    }
+
+    private function resolveNamespacePageIconId(string $namespace, string $sizeMode, array $extensions) {
+        global $conf;
+
+        $namespace = cleanID($namespace);
+        if ($namespace === '') return false;
+
+        $parentNamespace = (string)(getNS($namespace) ?: '');
+        $pageID = noNS($namespace);
+
+        $iconID = $this->resolveOwnPageIconId($parentNamespace, $pageID, $sizeMode, $extensions);
+        if ($iconID) return $iconID;
+
+        $leafPageID = cleanID($namespace . ':' . $pageID);
+        if ($leafPageID !== '' && page_exists($leafPageID)) {
+            $iconID = $this->resolveOwnPageIconId($namespace, $pageID, $sizeMode, $extensions);
+            if ($iconID) return $iconID;
+        }
+
+        if (isset($conf['start'])) {
+            $startId = cleanID((string)$conf['start']);
+            if ($startId !== '') {
+                $iconID = $this->resolveOwnPageIconId($namespace, $startId, $sizeMode, $extensions);
+                if ($iconID) return $iconID;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Added in version 2026-03-09.
+     * Resolves the icon media ID for a page, or false when no icon matches.
+     * Replaces the older getPageImage() name.
+     */
+    public function getPageIconId(
+        string $namespace,
+        string $pageID,
+        string $size = 'bigorsmall'
+    )
+    {
+        $sizeMode = $this->normalizeSizeMode($size);
+        $extensions = $this->getConfiguredExtensions();
+        $iconID = $this->resolveOwnPageIconId($namespace, $pageID, $sizeMode, $extensions);
+        if ($iconID) return $iconID;
+
+        $fallbackMode = $this->getParentFallbackMode();
+        if ($fallbackMode === 'none') return false;
+
+        $currentNamespace = $namespace ?: '';
+        while ($currentNamespace !== '') {
+            $parentNamespace = (string)(getNS($currentNamespace) ?: '');
+            $lookupNamespace = $parentNamespace !== '' ? $parentNamespace : $currentNamespace;
+            $iconID = $this->resolveNamespacePageIconId($lookupNamespace, $sizeMode, $extensions);
+            if ($iconID) return $iconID;
+            if ($fallbackMode === 'direct' || $parentNamespace === '') break;
+            $currentNamespace = $parentNamespace;
         }
 
         return false;

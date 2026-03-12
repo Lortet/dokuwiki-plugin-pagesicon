@@ -5,7 +5,7 @@ description: Gère et expose des icônes de page et de média
 author     : Valentin LORTET
 email      : contact@valentinlortet.fr
 type       : Action, Helper
-lastupdate : 2026-03-11
+lastupdate : 2026-03-12
 compatible : Librarian
 depends    :
 conflicts  :
@@ -44,6 +44,7 @@ Le plugin travaille sur la page courante. Il n'y a pas de cible externe à saisi
 | extensions | Extensions d'images autorisées (séparées par '';''). | ''svg;png;jpg;jpeg'' |
 | show_on_top | Afficher l'icône en haut de page. | ''true'' |
 | show_as_favicon | Utiliser l'icône comme favicon. | ''true'' |
+| parent_fallback | Politique d'héritage si la page n'a pas d'icône : aucune, parent direct, ou première icône trouvée en remontant les parents. | ''none'' |
 
 ===== Utilisation =====
 
@@ -104,6 +105,11 @@ La résolution d'une icône suit l'ordre défini par la configuration :
   * noms configurés pour la variante demandée ;
   * remplacements de ''~pagename~'' ;
   * fallbacks historiques du plugin comme ''logo'' et ''thumbnail''.
+
+Si aucune icône n'est trouvée sur la page elle-même, le plugin peut aussi hériter :
+  * d'aucune icône ;
+  * de l'icône du parent direct ;
+  * de la première icône trouvée en remontant les parents.
 
 Les URLs retournées par le helper sont versionnées avec un paramètre ''pi_ts'' basé sur le ''filemtime'' du média.
 
