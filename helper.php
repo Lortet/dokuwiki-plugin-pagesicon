@@ -183,31 +183,7 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
     }
 
     private function resolveOwnPageIconId(string $namespace, string $pageID, string $sizeMode, array $extensions) {
-        $namespace = $namespace ?: '';
-        $pageBase = $namespace ? ($namespace . ':' . $pageID) : $pageID;
-        $nsBase = $namespace ? ($namespace . ':') : '';
-
-        $genericBig = [
-            $pageBase,
-            $pageBase . ':logo',
-            $nsBase . 'logo',
-        ];
-        $genericSmall = [
-            $pageBase . ':thumbnail',
-            $nsBase . 'thumbnail',
-        ];
-
-        if ($sizeMode === 'big') {
-            $generic = $genericBig;
-        } elseif ($sizeMode === 'small') {
-            $generic = $genericSmall;
-        } elseif ($sizeMode === 'smallorbig') {
-            $generic = array_merge($genericSmall, $genericBig);
-        } else {
-            $generic = array_merge($genericBig, $genericSmall);
-        }
-
-        $imageNames = array_merge($this->buildConfiguredCandidates($namespace, $pageID, $sizeMode), $generic);
+        $imageNames = $this->buildConfiguredCandidates($namespace, $pageID, $sizeMode);
 
         foreach ($imageNames as $name) {
             if ($this->hasKnownExtension($name, $extensions)) {

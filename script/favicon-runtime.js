@@ -1,6 +1,10 @@
 (function () {
-    function replaceFavicon(href) {
-        if (!href || !document.head) return;
+    document.addEventListener('DOMContentLoaded', function () {
+        var meta = document.querySelector('meta[name="pagesicon-favicon"]');
+        if (!meta) return;
+
+        var href = meta.getAttribute('content');
+        if (!href) return;
 
         var links = document.head.querySelectorAll('link[rel*="icon"]');
         for (var i = 0; i < links.length; i++) {
@@ -18,13 +22,5 @@
         shortcut.rel = 'shortcut icon';
         shortcut.href = href;
         document.head.appendChild(shortcut);
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        var markers = document.querySelectorAll('.pagesicon-favicon-runtime[data-href]');
-        if (!markers.length) return;
-
-        var lastMarker = markers[markers.length - 1];
-        replaceFavicon(lastMarker.getAttribute('data-href') || '');
     });
 })();

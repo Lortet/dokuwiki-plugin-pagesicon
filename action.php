@@ -4,7 +4,7 @@ if(!defined('DOKU_MEDIAMANAGER_URL_BASE')) define('DOKU_MEDIAMANAGER_URL_BASE', 
 
 class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 	public function register(Doku_Event_Handler $controller) {
-		$controller->register_hook('TPL_CONTENT_DISPLAY', 'BEFORE', $this, '_displaypageicon');
+		$controller->register_hook('TPL_CONTENT_DISPLAY', 'BEFORE', $this, 'displayPageIcon');
 		$controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'setPageFavicon');
 		$controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'addUploadFormScript');
 		$controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'addFaviconRuntimeScript');
@@ -64,12 +64,13 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		return in_array($actionName, $disabled, true);
 	}
 
-	private function isLayoutIncludePage(string $pageID): bool {
-		// DokuWiki may temporarily switch $ID while rendering layout includes such as
-		// sidebar/footer. In these hooks we have no reliable "main content only" flag,
-		// so we explicitly ignore those technical pages to avoid replacing the current
-		// page icon/favicon with the one from the layout include.
-		return $pageID === 'sidebar' || $pageID === 'footer';
+	private function isLayoutIncludePage(): bool {
+		global $ID, $INFO;
+		// DokuWiki populates $INFO['id'] once for the originally requested page, but
+		// temporarily changes $ID while rendering layout includes (sidebar, footer, …)
+		// via tpl_include_page(). Comparing them detects any layout include without
+		// having to hardcode page names.
+		return isset($INFO['id']) && (string)$ID !== (string)$INFO['id'];
 	}
 
 	public function setPageFavicon(Doku_Event $event): void {
@@ -78,13 +79,13 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		if (!(bool)$this->getConf('show_as_favicon')) return;
 		if ($ACT !== 'show') return;
 
-		$pageID = noNS((string)$ID);
-		if ($this->isLayoutIncludePage($pageID)) return;
+		if ($this->isLayoutIncludePage()) return;
 
 		$helper = plugin_load('helper', 'pagesicon');
 		if (!$helper) return;
 
 		$namespace = getNS((string)$ID);
+		$pageID = noNS((string)$ID);
 		$favicon = $helper->getPageIconUrl($namespace, $pageID, 'smallorbig', ['w' => 32]);
 		if (!$favicon) return;
 		$favicon = html_entity_decode((string)$favicon, ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -114,22 +115,11 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		$links[] = ['rel' => 'icon', 'href' => $favicon];
 		$links[] = ['rel' => 'shortcut icon', 'href' => $favicon]; // Kept for legacy browser compatibility.
 		$event->data['link'] = $links;
-	}
 
-	public function addUploadFormScript(Doku_Event $event): void {
-		global $ACT;
-
-		if ($ACT !== 'pagesicon') return;
-
-		if (!isset($event->data['script']) || !is_array($event->data['script'])) {
-			$event->data['script'] = [];
+		if (!isset($event->data['meta']) || !is_array($event->data['meta'])) {
+			$event->data['meta'] = [];
 		}
-
-		$event->data['script'][] = [
-			'type' => 'text/javascript',
-			'src' => DOKU_BASE . 'lib/plugins/pagesicon/script/upload-form.js',
-			'_data' => 'pagesicon-upload-form',
-		];
+		$event->data['meta'][] = ['name' => 'pagesicon-favicon', 'content' => $favicon];
 	}
 
 	public function addFaviconRuntimeScript(Doku_Event $event): void {
@@ -149,16 +139,24 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		];
 	}
 
-	private function hasIconAlready(string $html, string $mediaID): bool {
-		return strpos($html, 'class="pagesicon-injected"') !== false;
+	public function addUploadFormScript(Doku_Event $event): void {
+		global $ACT;
+
+		if ($ACT !== 'pagesicon') return;
+
+		if (!isset($event->data['script']) || !is_array($event->data['script'])) {
+			$event->data['script'] = [];
+		}
+
+		$event->data['script'][] = [
+			'type' => 'text/javascript',
+			'src' => DOKU_BASE . 'lib/plugins/pagesicon/script/upload-form.js',
+			'_data' => 'pagesicon-upload-form',
+		];
 	}
 
-	private function injectFaviconRuntimeScript(string &$html, string $faviconHref): void {
-		if ($faviconHref === '') return;
-		$faviconHref = html_entity_decode($faviconHref, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-
-		$marker = '<span class="pagesicon-favicon-runtime" data-href="' . hsc($faviconHref) . '" hidden></span>';
-		$html = $marker . $html;
+	private function hasIconAlready(string $html): bool {
+		return strpos($html, 'class="pagesicon-injected"') !== false;
 	}
 
 	private function canUploadToTarget(string $targetPage): bool {
@@ -426,14 +424,13 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		echo '</form>';
 	}
 		
-    public function _displaypageicon(Doku_Event &$event, $param) {
-        global $ACT, $ID;
+	public function displayPageIcon(Doku_Event &$event, $param): void {
+		global $ACT, $ID;
 
 		if($ACT !== 'show') return;
 		if(!(bool)$this->getConf('show_on_top')) return;
 
-		$pageID = noNS($ID);
-		if($this->isLayoutIncludePage($pageID)) return;
+		if($this->isLayoutIncludePage()) return;
 
 		$namespace = getNS($ID);
 		$pageID = noNS((string)$ID);
@@ -443,16 +440,12 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		$sizeMode = $this->getIconSize() > 35 ? 'bigorsmall' : 'smallorbig';
 		$logoMediaID = $helper->getPageIconId($namespace, $pageID, $sizeMode);
 		if(!$logoMediaID) return;
-		if($this->hasIconAlready($event->data, $logoMediaID)) return;
+		if($this->hasIconAlready($event->data)) return;
 
 		$size = $this->getIconSize();
 		$src = $helper->getPageIconUrl($namespace, $pageID, $sizeMode, ['w' => $size]);
 		if(!$src) return;
 		$iconHtml = '<img src="' . $src . '" class="media pagesicon-image" loading="lazy" alt="" width="' . $size . '" />';
-		if ((bool)$this->getConf('show_as_favicon')) {
-			$favicon = $helper->getPageIconUrl($namespace, $pageID, $sizeMode, ['w' => 32]);
-			$this->injectFaviconRuntimeScript($event->data, $favicon);
-		}
 
 		$inlineIcon = '<span class="pagesicon-injected pagesicon-injected-inline">' . $iconHtml . '</span> ';
 		$updated = preg_replace('/<h1\b([^>]*)>/i', '<h1$1>' . $inlineIcon, $event->data, 1, $count);
