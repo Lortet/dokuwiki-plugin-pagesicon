@@ -390,7 +390,7 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
      * Added in version 2026-03-09.
      * Returns the configured default icon URL, or the bundled fallback image when available.
      */
-    public function getDefaultIconUrl(array $params = ['width' => 55], ?int &$mtime = null) {
+    public function getDefaultIconUrl(array $params = ['w' => 55], ?int &$mtime = null) {
         $mediaID = $this->getConfiguredDefaultImageMediaID();
         if ($mediaID) {
             $mtime = $this->getMediaMTime((string)$mediaID);
@@ -411,7 +411,7 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
      * Deprecated since version 2026-03-09, kept for backward compatibility.
      * Use getDefaultIconUrl() instead.
      */
-    public function getDefaultImageIcon(array $params = ['width' => 55], ?int &$mtime = null) {
+    public function getDefaultImageIcon(array $params = ['w' => 55], ?int &$mtime = null) {
         return $this->getDefaultIconUrl($params, $mtime);
     }
 
@@ -424,7 +424,7 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         string $namespace,
         string $pageID,
         string $size = 'bigorsmall',
-        array $params = ['width' => 55],
+        array $params = ['w' => 55],
         ?int &$mtime = null,
         bool $withDefault = false
     ) {
@@ -452,7 +452,7 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         string $namespace,
         string $pageID,
         string $size = 'bigorsmall',
-        array $params = ['width' => 55],
+        array $params = ['w' => 55],
         ?int &$mtime = null,
         bool $withDefault = false
     ) {
@@ -467,7 +467,7 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
     public function getMediaIconUrl(
         string $mediaID,
         string $size = 'bigorsmall',
-        array $params = ['width' => 55],
+        array $params = ['w' => 55],
         ?int &$mtime = null,
         bool $withDefault = false
     ) {
@@ -494,7 +494,7 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
     public function getMediaIcon(
         string $mediaID,
         string $size = 'bigorsmall',
-        array $params = ['width' => 55],
+        array $params = ['w' => 55],
         ?int &$mtime = null,
         bool $withDefault = false
     ) {
