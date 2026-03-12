@@ -6,6 +6,7 @@ With **pagesicon**, this is now possible.
 The plugin can:
 - display an icon at the top of the page (`show`);
 - use this icon as the browser tab favicon (`show_as_favicon`);
+- display an icon before internal wiki links;
 - provide an icon management page with `?do=pagesicon`;
 - handle `big` and `small` variants depending on the context;
 - expose a helper (reusable API) for other plugins.
@@ -28,6 +29,7 @@ In the configuration manager:
 - `show_on_top`: displays the icon in the page
 - `show_as_favicon`: uses the icon as favicon
 - `parent_fallback`: allows using a parent icon when the page has none
+- `link_icons`: displays an icon before internal links (`none` / `existing` / `all`)
 
 ## What the helper provides
 

@@ -7,3 +7,4 @@ $meta['extensions']          = array('string');
 $meta['show_on_top']         = array('onoff');
 $meta['show_as_favicon']     = array('onoff');
 $meta['parent_fallback']     = array('multichoice', '_choices' => array('none', 'direct', 'first'));
+$meta['link_icons']          = array('multichoice', '_choices' => array('none', 'existing', 'all'));

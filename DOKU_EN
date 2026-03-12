@@ -28,6 +28,7 @@ Install the plugin from the [[plugin:extension|Extension Manager]] using the URL
 The **pagesicon** plugin can:
   * display an icon at the top of the page;
   * use this icon as the page favicon;
+  * display an icon before internal wiki links;
   * manage icons from the page action ''?do=pagesicon'';
   * handle two variants: ''big'' and ''small'';
   * expose a helper API for other plugins.
@@ -45,6 +46,7 @@ The plugin works on the current page. There is no external target to fill in on 
 | show_on_top | Show the icon at the top of the page. | ''true'' |
 | show_as_favicon | Use the icon as favicon. | ''true'' |
 | parent_fallback | Fallback inheritance policy when the page has no icon: none, direct parent, or first icon found while walking up parent namespaces. | ''none'' |
+| link_icons | Show an icon before internal links: ''none'' (disabled), ''existing'' (existing pages only), ''all'' (all pages). | ''none'' |
 
 ===== Usage =====
 
@@ -113,8 +115,7 @@ Older API signatures are still available through legacy aliases.
 
 Icon resolution follows the configured order:
   * configured names for the requested variant;
-  * ''~pagename~'' replacements;
-  * historical plugin fallbacks such as ''logo'' and ''thumbnail''.
+  * ''~pagename~'' replacements.
 
 If no icon is found on the page itself, the plugin can also inherit:
   * no icon;

@@ -5,6 +5,7 @@ if(!defined('DOKU_MEDIAMANAGER_URL_BASE')) define('DOKU_MEDIAMANAGER_URL_BASE', 
 class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 	public function register(Doku_Event_Handler $controller) {
 		$controller->register_hook('TPL_CONTENT_DISPLAY', 'BEFORE', $this, 'displayPageIcon');
+		$controller->register_hook('RENDERER_CONTENT_POSTPROCESS', 'AFTER', $this, 'injectLinkIcons');
 		$controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'setPageFavicon');
 		$controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'addUploadFormScript');
 		$controller->register_hook('TPL_METAHEADER_OUTPUT', 'BEFORE', $this, 'addFaviconRuntimeScript');
@@ -86,7 +87,9 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 
 		$namespace = getNS((string)$ID);
 		$pageID = noNS((string)$ID);
-		$favicon = $helper->getPageIconUrl($namespace, $pageID, 'smallorbig', ['w' => 32]);
+		$size = $this->getIconSize();
+		$sizeMode = $size > 35 ? 'bigorsmall' : 'smallorbig';
+		$favicon = $helper->getPageIconUrl($namespace, $pageID, $sizeMode, ['w' => $size]);
 		if (!$favicon) return;
 		$favicon = html_entity_decode((string)$favicon, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
@@ -456,6 +459,38 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 
 		// Fallback: no H1 found, keep old behavior
 		$event->data = '<div class="pagesicon-injected">' . $iconHtml . '</div>' . "\n" . $event->data;
+	}
+
+	private static array $linkIconCache = [];
+
+	private function getLinkIconUrl(object $helper, string $pageId): ?string {
+		if (!array_key_exists($pageId, self::$linkIconCache)) {
+			$url = $helper->getPageIconUrl(getNS($pageId), noNS($pageId), 'smallorbig', ['w' => 16]);
+			self::$linkIconCache[$pageId] = $url ?: null;
+		}
+		return self::$linkIconCache[$pageId];
+	}
+
+	public function injectLinkIcons(Doku_Event $event): void {
+		if ($event->data[0] !== 'xhtml') return;
+
+		$conf = $this->getConf('link_icons');
+		if ($conf === 'none') return;
+
+		$helper = plugin_load('helper', 'pagesicon');
+		if (!$helper) return;
+
+		$event->data[1] = preg_replace_callback(
+			'~(<a\b[^>]*\bclass="[^"]*\bwikilink([12])[^"]*"[^>]*\btitle="([^"]+)"[^>]*>)~',
+			function ($m) use ($conf, $helper) {
+				if ($m[2] === '2' && $conf !== 'all') return $m[1];
+				$pageId = html_entity_decode($m[3], ENT_QUOTES | ENT_HTML5, 'UTF-8');
+				$iconUrl = $this->getLinkIconUrl($helper, $pageId);
+				if (!$iconUrl) return $m[1];
+				return $m[1] . '<img src="' . $iconUrl . '" class="pagesicon-link" alt="" width="16" height="16" loading="lazy">';
+			},
+			(string)$event->data[1]
+		);
 	}
 
 	public function handleAction(Doku_Event $event): void {

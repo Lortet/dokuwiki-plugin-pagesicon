@@ -10,3 +10,7 @@ $lang['parent_fallback']     = "Icône à utiliser si aucune n'est trouvée sur 
 $lang['parent_fallback_o_none'] = "Ne pas utiliser l'icone du parent";
 $lang['parent_fallback_o_direct'] = "Utiliser l'icone du parent direct";
 $lang['parent_fallback_o_first'] = "Utiliser la première icône trouvée en remontant les parents";
+$lang['link_icons']              = "Afficher une icône avant les liens internes";
+$lang['link_icons_o_none']       = "Désactivé";
+$lang['link_icons_o_existing']   = "Pages existantes uniquement";
+$lang['link_icons_o_all']        = "Toutes les pages (y compris manquantes)";

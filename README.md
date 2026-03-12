@@ -6,6 +6,7 @@ Avec **pagesicon**, c'est maintenant possible.
 Le plugin peut :
 - afficher une icône en haut de la page (show) ;
 - utiliser cette icône comme favicon de l'onglet (show_as_favicon) ;
+- afficher une icône devant les liens internes wiki ;
 - proposer une page de gestion d'ïcone avec `?do=pagesicon` ;
 - gèrer les variantes `big` et `small` suivant le contexte.
 - exposer un helper (API réutilisable) pour les autres plugins.
@@ -28,6 +29,7 @@ Dans le gestionnaire de configuration :
 - `show_on_top` : affiche l'icône dans la page
 - `show_as_favicon` : utilise l'icône comme favicon
 - `parent_fallback` : permet d'utiliser l'icône du parent si la page n'en a pas
+- `link_icons` : affiche une icône devant les liens internes (`none` / `existing` / `all`)
 
 ## Ce que le helper fournit
 

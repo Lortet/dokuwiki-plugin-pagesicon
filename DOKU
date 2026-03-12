@@ -28,6 +28,7 @@ Installer le plugin depuis le [[fr:plugin:extension|Gestionnaire d'extensions]] 
 Le plugin **pagesicon** permet :
   * d'afficher une icône en haut de la page ;
   * d'utiliser cette icône comme favicon ;
+  * d'afficher une icône devant les liens internes wiki ;
   * de gérer les icônes depuis l'action de page ''?do=pagesicon'' ;
   * de gérer deux variantes : ''big'' et ''small'' ;
   * d'exposer un helper pour les autres plugins.
@@ -45,6 +46,7 @@ Le plugin travaille sur la page courante. Il n'y a pas de cible externe à saisi
 | show_on_top | Afficher l'icône en haut de page. | ''true'' |
 | show_as_favicon | Utiliser l'icône comme favicon. | ''true'' |
 | parent_fallback | Politique d'héritage si la page n'a pas d'icône : aucune, parent direct, ou première icône trouvée en remontant les parents. | ''none'' |
+| link_icons | Afficher une icône devant les liens internes : ''none'' (désactivé), ''existing'' (pages existantes uniquement), ''all'' (toutes les pages). | ''none'' |
 
 ===== Utilisation =====
 
@@ -103,8 +105,7 @@ Les anciennes signatures de l'API sont conservées via des alias legacy.
 
 La résolution d'une icône suit l'ordre défini par la configuration :
   * noms configurés pour la variante demandée ;
-  * remplacements de ''~pagename~'' ;
-  * fallbacks historiques du plugin comme ''logo'' et ''thumbnail''.
+  * remplacements de ''~pagename~''.
 
 Si aucune icône n'est trouvée sur la page elle-même, le plugin peut aussi hériter :
   * d'aucune icône ;
