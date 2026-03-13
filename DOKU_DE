@@ -1,0 +1,132 @@
+====== Pagesicon Plugin ======
+
+---- plugin ----
+description: Seitenicons und Medien-Icons verwalten und bereitstellen
+author     : Valentin LORTET
+email      : contact@valentinlortet.fr
+type       : Action, Helper
+lastupdate : 2026-03-12
+compatible : Librarian
+depends    :
+conflicts  :
+similar    :
+tags       : Media, UI, Navigation, Helper, Icons
+
+downloadurl: https://github.com/Lortet/dokuwiki-plugin-pagesicon/zipball/master
+bugtracker : https://github.com/Lortet/dokuwiki-plugin-pagesicon/issues
+sourcerepo : https://github.com/Lortet/dokuwiki-plugin-pagesicon/
+donationurl:
+screenshot_img :
+----
+
+[[fr:plugin:pagesicon|🇫🇷 Français]] | [[plugin:pagesicon|🇬🇧 English]] | 🇩🇪 **Deutsch** | [[es:plugin:pagesicon|🇪🇸 Español]]
+
+===== Installation =====
+
+Das Plugin über den [[plugin:extension|Erweiterungs-Manager]] mit der obigen URL installieren oder den Ordner nach ''lib/plugins/pagesicon'' kopieren.
+
+===== Beschreibung =====
+
+Das Plugin **pagesicon** kann:
+  * ein Icon oben auf der Seite anzeigen;
+  * dieses Icon als Seiten-Favicon verwenden;
+  * ein Icon vor internen Wiki-Links anzeigen;
+  * Icons über die Seitenaktion ''?do=pagesicon'' verwalten;
+  * zwei Varianten verwalten: ''big'' und ''small'';
+  * einen Helper für andere Plugins bereitstellen.
+
+Das Plugin arbeitet auf der aktuellen Seite. Es gibt keine externe Seite, die auf dem Verwaltungsbildschirm anzugeben wäre.
+
+===== Einstellungen =====
+
+^ Name ^ Beschreibung ^ Standardwert ^
+| icon_name | Kandidaten-Namen für das ''big''-Icon (getrennt durch '';''). Unterstützt ''~pagename~''. | ''~pagename~;icon_thumbnail;icon'' |
+| icon_thumbnail_name | Kandidaten-Namen für das ''small''-Icon (getrennt durch '';''). Unterstützt ''~pagename~''. | ''~pagename~;icon'' |
+| default_image | Standardbild (mediaID), nur verwendet wenn eine Helper-Methode explizit einen Fallback anfordert. | '''' |
+| icon_size | Größe des oben auf der Seite angezeigten Icons (px). | ''55'' |
+| extensions | Erlaubte Bilderweiterungen (getrennt durch '';''). | ''svg;png;jpg;jpeg'' |
+| show_on_top | Icon oben auf der Seite anzeigen. | ''true'' |
+| show_as_favicon | Icon als Favicon verwenden. | ''true'' |
+| parent_fallback | Vererbungsrichtlinie, wenn die Seite kein Icon hat: keine, direktes Elternteil oder erstes Icon beim Durchlaufen der übergeordneten Namensräume. | ''none'' |
+| link_icons | Icon vor internen Links anzeigen: ''none'' (deaktiviert), ''existing'' (nur vorhandene Seiten), ''all'' (alle Seiten). | ''none'' |
+
+===== Verwendung =====
+
+Nutzen Sie auf einer Seite die Aktion **Icon verwalten** und dann:
+  * ein ''big''-Icon hochladen;
+  * ein ''small''-Icon hochladen;
+  * das aktuelle Icon löschen.
+
+Das Formular:
+  * berechnet die erlaubten Zieldateinamen aus der Konfiguration;
+  * beschränkt Uploads auf die konfigurierten Erweiterungen;
+  * öffnet den Medienmanager im Namensraum der Seite.
+
+===== Helper-API =====
+
+Helper laden:
+''$pagesicon = plugin_load('helper', 'pagesicon');''
+
+==== Hauptmethoden ====
+
+^ Methode ^ Seit ^ Beschreibung ^
+| ''getPageIconId($namespace, $pageID, $size = "bigorsmall")'' | ''2026-03-09'' | Gibt die mediaID eines Seiten-Icons zurück, oder ''false''. |
+| ''getMediaIconId($mediaID, $size = "bigorsmall")'' | ''2026-03-09'' | Gibt die mediaID des einer Mediendatei zugeordneten Icons zurück, oder ''false''. |
+| ''getPageIconUrl($namespace, $pageID, $size = "bigorsmall", $params = ['width' => 55], &$mtime = null, $withDefault = false)'' | ''2026-03-09'' | Gibt die versionierte URL eines Seiten-Icons zurück, oder ''false''. |
+| ''getMediaIconUrl($mediaID, $size = "bigorsmall", $params = ['width' => 55], &$mtime = null, $withDefault = false)'' | ''2026-03-09'' | Gibt die versionierte URL des einer Mediendatei zugeordneten Icons zurück, oder ''false''. |
+| ''getDefaultIconUrl($params = ['width' => 55], &$mtime = null)'' | ''2026-03-09'' | Gibt das Standardbild zurück, wenn kein Icon gefunden wird. |
+| ''getUploadIconPage($targetPage = "")'' | ''2026-03-06'' | Gibt die ''?do=pagesicon''-URL einer Seite zurück, oder ''null'' wenn nicht autorisiert. |
+| ''getUploadMediaIconPage($mediaID = "")'' | ''2026-03-06'' | Gibt die Icon-Verwaltungs-URL einer Mediendatei zurück. |
+| ''notifyIconUpdated($targetPage, $action = "update", $mediaID = "")'' | ''2026-03-06'' | Löst das Cache-Invalidierungsereignis aus. |
+| ''isPageIconMedia($mediaID)'' | ''2026-03-11'' | Gibt an, ob eine Mediendatei als vom Plugin verwaltetes Icon betrachtet werden soll. |
+
+==== Öffentliche Hilfsmethoden ====
+
+Diese Methoden sind etwas technischer, aber nützlich wenn ein anderes Plugin die genaue Benennungs- und Konfigurationslogik von ''pagesicon'' wiederverwenden möchte.
+
+^ Methode ^ Seit ^ Beschreibung ^
+| ''getConfiguredExtensions()'' | ''2026-03-11'' | Gibt die konfigurierte Liste erlaubter Erweiterungen zurück. |
+| ''getVariantTemplates($variant)'' | ''2026-03-11'' | Gibt die konfigurierten Dateinamensvorlagen für ''big'' oder ''small'' zurück. |
+| ''normalizeIconBaseName($name)'' | ''2026-03-11'' | Normalisiert einen Icon-Dateinamen ohne Namensraum oder Erweiterung. |
+| ''getUploadNameChoices($targetPage, $variant)'' | ''2026-03-11'' | Gibt die erlaubten Zielnamen für einen Upload zurück. |
+
+===== Ereignis =====
+
+Bei einem Upload oder einer Löschung sendet das Plugin:
+  * ''PLUGIN_PAGESICON_UPDATED''
+
+Payload:
+  * ''target_page''
+  * ''action''
+  * ''media_id''
+
+Verbrauchende Plugins bleiben für ihre eigene Cache-Invalidierung verantwortlich.
+
+===== Kompatibilität =====
+
+Ältere API-Signaturen sind weiterhin über Legacy-Aliase verfügbar.
+
+^ Historischer Alias ^ Hinzugefügt ^ Veraltet ^ Ersatz ^
+| ''getPageImage(...)'' | ''2026-03-06'' | ''2026-03-09'' | ''getPageIconId(...)'' |
+| ''getMediaImage(...)'' | ''2026-03-06'' | ''2026-03-09'' | ''getMediaIconId(...)'' |
+| ''getImageIcon(...)'' | ''2026-03-06'' | ''2026-03-09'' | ''getPageIconUrl(...)'' |
+| ''getMediaIcon(...)'' | ''2026-03-06'' | ''2026-03-09'' | ''getMediaIconUrl(...)'' |
+| ''getDefaultImageIcon(...)'' | ''2026-03-09'' | ''2026-03-09'' | ''getDefaultIconUrl(...)'' |
+
+===== Funktionsweise =====
+
+Die Icon-Auflösung folgt der konfigurierten Reihenfolge:
+  * konfigurierte Namen für die angeforderte Variante;
+  * ''~pagename~''-Ersetzungen.
+
+Wenn auf der Seite kein Icon gefunden wird, kann das Plugin auch erben:
+  * kein Icon;
+  * das Icon des direkten Elternteils;
+  * das erste Icon beim Durchlaufen der übergeordneten Namensräume.
+
+Die vom Helper zurückgegebenen URLs sind mit einem ''pi_ts''-Parameter versioniert, der auf dem ''filemtime'' des Mediums basiert.
+
+===== Hinweise =====
+
+  * Das Plugin ignoriert technische Seiten wie ''sidebar'' und ''footer'' bei der Icon/Favicon-Einbettung, um zu verhindern, dass ein Layout-Include das Icon der aktuellen Seite ersetzt.
+  * Der Verwaltungsbildschirm verwendet die aktuelle Plugin-Konfiguration. Wenn eine erforderliche Konfiguration leer oder ungültig ist, gibt das Plugin eine PHP-Warnung aus und erfindet keine Fallback-Werte.

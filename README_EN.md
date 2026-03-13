@@ -1,5 +1,7 @@
 # Pagesicon
 
+[🇫🇷 Français](README.md) | 🇬🇧 English | [🇩🇪 Deutsch](README_DE.md) | [🇪🇸 Español](README_ES.md)
+
 I really like DokuWiki, but I always found it a bit sad: there was no simple way to add nice icons to pages.  
 With **pagesicon**, this is now possible.
 

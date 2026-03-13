@@ -19,6 +19,8 @@ donationurl:
 screenshot_img :
 ----
 
+[[fr:plugin:pagesicon|🇫🇷 Français]] | 🇬🇧 **English** | [[de:plugin:pagesicon|🇩🇪 Deutsch]] | [[es:plugin:pagesicon|🇪🇸 Español]]
+
 ===== Installation =====
 
 Install the plugin from the [[plugin:extension|Extension Manager]] using the URL above, or copy it into ''lib/plugins/pagesicon''.
