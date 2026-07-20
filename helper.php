@@ -259,7 +259,7 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         return false;
     }
 
-    private function resolveNamespacePageIconDetails(string $namespace, string $sizeMode, array $extensions, string $fallbackMode): array|false {
+    private function resolveNamespacePageIconDetails(string $namespace, string $sizeMode, array $extensions, string $fallbackMode) {
         global $conf;
 
         $namespace = cleanID($namespace);
