@@ -195,11 +195,50 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		return DOKU_MEDIAMANAGER_URL_BASE . '?ns=' . rawurlencode($namespace);
 	}
 
-	private function renderCurrentIconPreview(string $mediaID, string $defaultTarget, string $actionPage, int $previewSize): void {
+	private function getFallbackModeLabel(string $mode): string {
+		$langKey = 'fallback_mode_' . $mode;
+		$label = (string)$this->getLang($langKey);
+		if ($label !== '' && $label !== $langKey) return $label;
+
+		if ($mode === 'direct') return 'Direct parent only';
+		if ($mode === 'first') return 'First icon found while walking up';
+		return 'No fallback';
+	}
+
+	private function getIconOriginLabel(array $details): string {
+		$origin = (string)($details['origin'] ?? '');
+		$sourcePage = (string)($details['source_page'] ?? '');
+
+		if ($origin === 'current_page') {
+			return (string)$this->getLang('icon_origin_current_page');
+		}
+
+		if ($origin === 'direct_parent') {
+			return sprintf((string)$this->getLang('icon_origin_direct_parent'), $sourcePage);
+		}
+
+		if ($origin === 'first_parent_found') {
+			return sprintf((string)$this->getLang('icon_origin_first_parent_found'), $sourcePage);
+		}
+
+		return $sourcePage;
+	}
+
+	private function renderCurrentIconPreview(array $details, string $defaultTarget, string $actionPage, int $previewSize): void {
+		$mediaID = (string)($details['media_id'] ?? '');
+		$absolutePath = (string)($details['absolute_path'] ?? '');
+		$originLabel = $this->getIconOriginLabel($details);
+
 		echo '<a href="' . hsc($this->getMediaManagerUrl($defaultTarget)) . '" target="_blank" title="' . hsc($this->getLang('open_media_manager')) . '">';
 		echo '<img src="' . ml($mediaID, ['w' => $previewSize]) . '" alt="" width="' . $previewSize . '" style="display:block;margin:6px 0;" />';
 		echo '</a>';
 		echo '<small>' . hsc(noNS($mediaID)) . '</small>';
+		if ($originLabel !== '') {
+			echo '<br /><small>' . hsc(sprintf($this->getLang('current_icon_origin'), $originLabel)) . '</small>';
+		}
+		if ($absolutePath !== '') {
+			echo '<br /><small>' . hsc(sprintf($this->getLang('current_icon_absolute_path'), $absolutePath)) . '</small>';
+		}
 		echo '<form action="' . wl($actionPage) . '" method="post" style="margin-top:6px;">';
 		formSecurityToken();
 		echo '<input type="hidden" name="do" value="pagesicon" />';
@@ -355,11 +394,14 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		$namespace = getNS($defaultTarget);
 		$pageID = noNS($defaultTarget);
 		$previewSize = $this->getIconSize();
-		$currentBig = ($helper && method_exists($helper, 'getPageIconId')) ? $helper->getPageIconId($namespace, $pageID, 'big') : false;
-		$currentSmall = ($helper && method_exists($helper, 'getPageIconId')) ? $helper->getPageIconId($namespace, $pageID, 'small') : false;
+		$currentBig = ($helper && method_exists($helper, 'getPageIconDetails')) ? $helper->getPageIconDetails($namespace, $pageID, 'big') : false;
+		$currentSmall = ($helper && method_exists($helper, 'getPageIconDetails')) ? $helper->getPageIconDetails($namespace, $pageID, 'small') : false;
+		$fallbackMode = ($helper && method_exists($helper, 'getCurrentFallbackMode')) ? $helper->getCurrentFallbackMode() : 'none';
 
 		echo '<h1>' . hsc($this->getLang('menu')) . '</h1>';
 		echo '<p>' . hsc($this->getLang('intro')) . '</p>';
+		echo '<p><small>' . hsc(sprintf($this->getLang('fallback_mode_current'), $this->getFallbackModeLabel($fallbackMode))) . '</small></p>';
+		echo '<p><small>' . hsc($this->getLang('icon_scope_help')) . '</small></p>';
 		echo '<p><small>' . hsc(sprintf($this->getLang('allowed_extensions'), $allowed)) . '</small></p>';
 		echo '<div class="pagesicon-current-preview" style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin:10px 0 16px;">';
 		echo '<div class="pagesicon-current-item">';

@@ -4,6 +4,28 @@ if (!defined('DOKU_INC')) die();
 class helper_plugin_pagesicon extends DokuWiki_Plugin {
     private const BUNDLED_DEFAULT_IMAGE_RELATIVE_PATH = 'lib/plugins/pagesicon/images/default_image.png';
 
+    private function buildIconDetails(
+        string $mediaID,
+        string $origin,
+        string $requestedNamespace,
+        string $sourceNamespace,
+        string $sourcePageID,
+        string $fallbackMode
+    ): array {
+        $mediaID = cleanID($mediaID);
+
+        return [
+            'media_id' => $mediaID,
+            'absolute_path' => $mediaID !== '' ? mediaFN($mediaID) : '',
+            'origin' => $origin,
+            'requested_namespace' => cleanID($requestedNamespace),
+            'source_namespace' => cleanID($sourceNamespace),
+            'source_page_id' => cleanID($sourcePageID),
+            'source_page' => cleanID(($sourceNamespace !== '' ? $sourceNamespace . ':' : '') . $sourcePageID),
+            'fallback_mode' => $fallbackMode,
+        ];
+    }
+
     private function getBundledDefaultImagePath(): string {
         return DOKU_INC . self::BUNDLED_DEFAULT_IMAGE_RELATIVE_PATH;
     }
@@ -182,6 +204,14 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         return $mode;
     }
 
+    /**
+     * Added in version 2026-07-20.
+     * Returns the currently configured parent fallback mode.
+     */
+    public function getCurrentFallbackMode(): string {
+        return $this->getParentFallbackMode();
+    }
+
     private function resolveOwnPageIconId(string $namespace, string $pageID, string $sizeMode, array $extensions) {
         $imageNames = $this->buildConfiguredCandidates($namespace, $pageID, $sizeMode);
 
@@ -229,6 +259,41 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         return false;
     }
 
+    private function resolveNamespacePageIconDetails(string $namespace, string $sizeMode, array $extensions, string $fallbackMode): array|false {
+        global $conf;
+
+        $namespace = cleanID($namespace);
+        if ($namespace === '') return false;
+
+        $parentNamespace = (string)(getNS($namespace) ?: '');
+        $pageID = noNS($namespace);
+
+        $iconID = $this->resolveOwnPageIconId($parentNamespace, $pageID, $sizeMode, $extensions);
+        if ($iconID) {
+            return $this->buildIconDetails($iconID, 'namespace_page', $namespace, $parentNamespace, $pageID, $fallbackMode);
+        }
+
+        $leafPageID = cleanID($namespace . ':' . $pageID);
+        if ($leafPageID !== '' && page_exists($leafPageID)) {
+            $iconID = $this->resolveOwnPageIconId($namespace, $pageID, $sizeMode, $extensions);
+            if ($iconID) {
+                return $this->buildIconDetails($iconID, 'namespace_leaf_page', $namespace, $namespace, $pageID, $fallbackMode);
+            }
+        }
+
+        if (isset($conf['start'])) {
+            $startId = cleanID((string)$conf['start']);
+            if ($startId !== '') {
+                $iconID = $this->resolveOwnPageIconId($namespace, $startId, $sizeMode, $extensions);
+                if ($iconID) {
+                    return $this->buildIconDetails($iconID, 'namespace_start_page', $namespace, $namespace, $startId, $fallbackMode);
+                }
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Added in version 2026-03-09.
      * Resolves the icon media ID for a page, or false when no icon matches.
@@ -256,6 +321,48 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
             if ($iconID) return $iconID;
             if ($fallbackMode === 'direct' || $parentNamespace === '') break;
             $currentNamespace = $parentNamespace;
+        }
+
+        return false;
+    }
+
+    /**
+     * Added in version 2026-07-20.
+     * Returns detailed information about the resolved page icon, or false.
+     */
+    public function getPageIconDetails(
+        string $namespace,
+        string $pageID,
+        string $size = 'bigorsmall'
+    ) {
+        $namespace = cleanID($namespace);
+        $pageID = cleanID($pageID);
+        $sizeMode = $this->normalizeSizeMode($size);
+        $extensions = $this->getConfiguredExtensions();
+        $fallbackMode = $this->getParentFallbackMode();
+
+        $iconID = $this->resolveOwnPageIconId($namespace, $pageID, $sizeMode, $extensions);
+        if ($iconID) {
+            return $this->buildIconDetails($iconID, 'current_page', $namespace, $namespace, $pageID, $fallbackMode);
+        }
+
+        if ($fallbackMode === 'none') return false;
+
+        $currentNamespace = $namespace ?: '';
+        $depth = 0;
+        while ($currentNamespace !== '') {
+            $parentNamespace = (string)(getNS($currentNamespace) ?: '');
+            $lookupNamespace = $parentNamespace !== '' ? $parentNamespace : $currentNamespace;
+            $details = $this->resolveNamespacePageIconDetails($lookupNamespace, $sizeMode, $extensions, $fallbackMode);
+            if ($details) {
+                $details['origin'] = $depth === 0 ? 'direct_parent' : 'first_parent_found';
+                $details['fallback_depth'] = $depth + 1;
+                $details['lookup_namespace'] = $lookupNamespace;
+                return $details;
+            }
+            if ($fallbackMode === 'direct' || $parentNamespace === '') break;
+            $currentNamespace = $parentNamespace;
+            $depth++;
         }
 
         return false;
