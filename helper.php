@@ -4,6 +4,22 @@ if (!defined('DOKU_INC')) die();
 class helper_plugin_pagesicon extends DokuWiki_Plugin {
     private const BUNDLED_DEFAULT_IMAGE_RELATIVE_PATH = 'lib/plugins/pagesicon/images/default_image.png';
 
+    private function getCachePurgeFilePath(): string {
+        global $conf;
+
+        return (string)$conf['cachedir'] . '/purgefile';
+    }
+
+    private function getCacheInvalidationToken(): string {
+        $purgeFile = $this->getCachePurgeFilePath();
+        if (!@file_exists($purgeFile)) return '';
+
+        $token = @file_get_contents($purgeFile);
+        if (!is_string($token)) return '';
+
+        return trim($token);
+    }
+
     private function buildIconDetails(
         string $mediaID,
         string $origin,
@@ -16,7 +32,7 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
 
         return [
             'media_id' => $mediaID,
-            'absolute_path' => $mediaID !== '' ? mediaFN($mediaID) : '',
+            'media_path' => $mediaID,
             'origin' => $origin,
             'requested_namespace' => cleanID($requestedNamespace),
             'source_namespace' => cleanID($sourceNamespace),
@@ -37,7 +53,8 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         $base = rtrim((string)DOKU_BASE, '/');
         $url = $base . '/' . self::BUNDLED_DEFAULT_IMAGE_RELATIVE_PATH;
         $mtime = @filemtime($path);
-        return $this->appendVersionToUrl($url, $mtime ? (int)$mtime : 0);
+        $url = $this->appendVersionToUrl($url, $mtime ? (int)$mtime : 0);
+        return $this->appendCacheTokenToUrl($url, $this->getCacheInvalidationToken());
     }
 
     private function getConfiguredDefaultImageMediaID() {
@@ -62,14 +79,23 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         return $url . $sep . 'pi_ts=' . $mtime;
     }
 
+    private function appendCacheTokenToUrl(string $url, string $token): string {
+        if ($url === '' || $token === '') return $url;
+        $sep = strpos($url, '?') === false ? '?' : '&';
+        return $url . $sep . 'pi_cv=' . rawurlencode($token);
+    }
+
     /**
      * Added in version 2026-03-06.
      * Notifies consumers that an icon changed and triggers cache invalidation hooks.
      */
     public function notifyIconUpdated(string $targetPage, string $action = 'update', string $mediaID = ''): void {
-        global $conf;
-
-        @io_saveFile($conf['cachedir'] . '/purgefile', time());
+        try {
+            $purgeToken = sprintf('%.6f-%s', microtime(true), bin2hex(random_bytes(4)));
+        } catch (\Throwable $e) {
+            $purgeToken = uniqid('pagesicon-', true);
+        }
+        @io_saveFile($this->getCachePurgeFilePath(), $purgeToken);
 
         $data = [
             'target_page' => cleanID($targetPage),
@@ -131,11 +157,20 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         return $choices;
     }
 
-    private function buildConfiguredCandidatesFromRaw(string $raw, string $namespace, string $pageID): array {
+    private function buildConfiguredCandidatesFromRaw(
+        string $raw,
+        string $namespace,
+        string $pageID,
+        bool $includePageSpecific = true
+    ): array {
         $configured = [];
         $entries = array_filter(array_map('trim', explode(';', $raw)));
 
         foreach ($entries as $entry) {
+            if (!$includePageSpecific && strpos($entry, '~pagename~') !== false) {
+                continue;
+            }
+
             $name = str_replace('~pagename~', $pageID, $entry);
             if ($name === '') continue;
 
@@ -149,12 +184,17 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         return array_values(array_unique($configured));
     }
 
-    private function buildConfiguredCandidates(string $namespace, string $pageID, string $sizeMode): array {
+    private function buildConfiguredCandidates(
+        string $namespace,
+        string $pageID,
+        string $sizeMode,
+        bool $includePageSpecific = true
+    ): array {
         $bigRaw = trim((string)$this->getConf('icon_name'));
         $smallRaw = trim((string)$this->getConf('icon_thumbnail_name'));
 
-        $big = $this->buildConfiguredCandidatesFromRaw($bigRaw, $namespace, $pageID);
-        $small = $this->buildConfiguredCandidatesFromRaw($smallRaw, $namespace, $pageID);
+        $big = $this->buildConfiguredCandidatesFromRaw($bigRaw, $namespace, $pageID, $includePageSpecific);
+        $small = $this->buildConfiguredCandidatesFromRaw($smallRaw, $namespace, $pageID, $includePageSpecific);
 
         if ($sizeMode === 'big') return $big;
         if ($sizeMode === 'small') return $small;
@@ -212,8 +252,14 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         return $this->getParentFallbackMode();
     }
 
-    private function resolveOwnPageIconId(string $namespace, string $pageID, string $sizeMode, array $extensions) {
-        $imageNames = $this->buildConfiguredCandidates($namespace, $pageID, $sizeMode);
+    private function resolveOwnPageIconId(
+        string $namespace,
+        string $pageID,
+        string $sizeMode,
+        array $extensions,
+        bool $includePageSpecific = true
+    ) {
+        $imageNames = $this->buildConfiguredCandidates($namespace, $pageID, $sizeMode, $includePageSpecific);
 
         foreach ($imageNames as $name) {
             if ($this->hasKnownExtension($name, $extensions)) {
@@ -230,6 +276,171 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         return false;
     }
 
+    private function buildCandidateChecks(array $imageNames, array $extensions): array {
+        $checks = [];
+
+        foreach ($imageNames as $name) {
+            if ($this->hasKnownExtension($name, $extensions)) {
+                $mediaID = cleanID($name);
+                $checks[] = [
+                    'media_id' => $mediaID,
+                    'exists' => @file_exists(mediaFN($mediaID)),
+                ];
+                continue;
+            }
+
+            foreach ($extensions as $ext) {
+                $mediaID = cleanID($name . '.' . $ext);
+                $checks[] = [
+                    'media_id' => $mediaID,
+                    'exists' => @file_exists(mediaFN($mediaID)),
+                ];
+            }
+        }
+
+        return $checks;
+    }
+
+    private function buildDebugStep(
+        string $label,
+        string $namespace,
+        string $pageID,
+        string $sizeMode,
+        array $extensions,
+        string $contextNamespace = '',
+        bool $includePageSpecific = true
+    ): array {
+        $candidates = $this->buildConfiguredCandidates($namespace, $pageID, $sizeMode, $includePageSpecific);
+        $targetPage = cleanID(($namespace !== '' ? $namespace . ':' : '') . $pageID);
+
+        return [
+            'label' => $label,
+            'namespace' => cleanID($namespace),
+            'page_id' => cleanID($pageID),
+            'target_page' => $targetPage,
+            'context_namespace' => cleanID($contextNamespace),
+            'checks' => $this->buildCandidateChecks($candidates, $extensions),
+        ];
+    }
+
+    /**
+     * Added in version 2026-07-20.
+     * Returns every existing media ID matching the configured candidates on the page itself.
+     */
+    public function getOwnPageIconMediaIds(
+        string $namespace,
+        string $pageID,
+        string $size = 'bigorsmall'
+    ): array {
+        $sizeMode = $this->normalizeSizeMode($size);
+        $extensions = $this->getConfiguredExtensions();
+        $imageNames = $this->buildConfiguredCandidates($namespace, $pageID, $sizeMode);
+        $matches = [];
+
+        foreach ($imageNames as $name) {
+            if ($this->hasKnownExtension($name, $extensions)) {
+                if (@file_exists(mediaFN($name))) {
+                    $matches[] = $name;
+                }
+                continue;
+            }
+
+            foreach ($extensions as $ext) {
+                $path = $name . '.' . $ext;
+                if (@file_exists(mediaFN($path))) {
+                    $matches[] = $path;
+                }
+            }
+        }
+
+        return array_values(array_unique(array_map('cleanID', $matches)));
+    }
+
+    /**
+     * Added in version 2026-07-20.
+     * Returns the ordered list of candidate media IDs tested to resolve a page icon.
+     */
+    public function getPageIconDebugInfo(
+        string $namespace,
+        string $pageID,
+        string $size = 'bigorsmall'
+    ): array {
+        global $conf;
+
+        $namespace = cleanID($namespace);
+        $pageID = cleanID($pageID);
+        $sizeMode = $this->normalizeSizeMode($size);
+        $extensions = $this->getConfiguredExtensions();
+        $fallbackMode = $this->getParentFallbackMode();
+        $steps = [];
+
+        $steps[] = $this->buildDebugStep('current_page', $namespace, $pageID, $sizeMode, $extensions, $namespace, true);
+
+        if ($fallbackMode === 'none') {
+            return [
+                'fallback_mode' => $fallbackMode,
+                'steps' => $steps,
+            ];
+        }
+
+        $currentNamespace = $namespace ?: '';
+        $depth = 0;
+        $seenLookupNamespaces = [];
+        while ($currentNamespace !== '') {
+            $parentNamespace = (string)(getNS($currentNamespace) ?: '');
+            $lookupNamespace = $parentNamespace !== '' ? $parentNamespace : $currentNamespace;
+            $lookupNamespace = cleanID($lookupNamespace);
+            if ($lookupNamespace === '' || isset($seenLookupNamespaces[$lookupNamespace])) break;
+            $seenLookupNamespaces[$lookupNamespace] = true;
+
+            $startId = cleanID((string)($conf['start'] ?? ''));
+            if ($startId !== '') {
+                $steps[] = $this->buildDebugStep(
+                    $depth === 0 ? 'direct_parent_start_page' : 'parent_start_page',
+                    $lookupNamespace,
+                    $startId,
+                    $sizeMode,
+                    $extensions,
+                    $lookupNamespace,
+                    false
+                );
+            }
+
+            $steps[] = $this->buildDebugStep(
+                $depth === 0 ? 'direct_parent_namespace_page' : 'parent_namespace_page',
+                (string)(getNS($lookupNamespace) ?: ''),
+                noNS($lookupNamespace),
+                $sizeMode,
+                $extensions,
+                $lookupNamespace,
+                false
+            );
+
+            $leafPageID = noNS($lookupNamespace);
+            $leafFullPageID = cleanID($lookupNamespace . ':' . $leafPageID);
+            if ($leafFullPageID !== '' && page_exists($leafFullPageID)) {
+                $steps[] = $this->buildDebugStep(
+                    $depth === 0 ? 'direct_parent_leaf_page' : 'parent_leaf_page',
+                    $lookupNamespace,
+                    $leafPageID,
+                    $sizeMode,
+                    $extensions,
+                    $lookupNamespace,
+                    false
+                );
+            }
+
+            if ($fallbackMode === 'direct' || $parentNamespace === '') break;
+            $currentNamespace = $parentNamespace;
+            $depth++;
+        }
+
+        return [
+            'fallback_mode' => $fallbackMode,
+            'steps' => $steps,
+        ];
+    }
+
     private function resolveNamespacePageIconId(string $namespace, string $sizeMode, array $extensions) {
         global $conf;
 
@@ -239,22 +450,22 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         $parentNamespace = (string)(getNS($namespace) ?: '');
         $pageID = noNS($namespace);
 
-        $iconID = $this->resolveOwnPageIconId($parentNamespace, $pageID, $sizeMode, $extensions);
-        if ($iconID) return $iconID;
-
-        $leafPageID = cleanID($namespace . ':' . $pageID);
-        if ($leafPageID !== '' && page_exists($leafPageID)) {
-            $iconID = $this->resolveOwnPageIconId($namespace, $pageID, $sizeMode, $extensions);
-            if ($iconID) return $iconID;
-        }
-
         if (isset($conf['start'])) {
             $startId = cleanID((string)$conf['start']);
             if ($startId !== '') {
-                $iconID = $this->resolveOwnPageIconId($namespace, $startId, $sizeMode, $extensions);
+                $iconID = $this->resolveOwnPageIconId($namespace, $startId, $sizeMode, $extensions, false);
                 if ($iconID) return $iconID;
             }
         }
+
+        $leafPageID = cleanID($namespace . ':' . $pageID);
+        if ($leafPageID !== '' && page_exists($leafPageID)) {
+            $iconID = $this->resolveOwnPageIconId($namespace, $pageID, $sizeMode, $extensions, false);
+            if ($iconID) return $iconID;
+        }
+
+        $iconID = $this->resolveOwnPageIconId($parentNamespace, $pageID, $sizeMode, $extensions, false);
+        if ($iconID) return $iconID;
 
         return false;
     }
@@ -268,27 +479,27 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         $parentNamespace = (string)(getNS($namespace) ?: '');
         $pageID = noNS($namespace);
 
-        $iconID = $this->resolveOwnPageIconId($parentNamespace, $pageID, $sizeMode, $extensions);
-        if ($iconID) {
-            return $this->buildIconDetails($iconID, 'namespace_page', $namespace, $parentNamespace, $pageID, $fallbackMode);
+        if (isset($conf['start'])) {
+            $startId = cleanID((string)$conf['start']);
+            if ($startId !== '') {
+                $iconID = $this->resolveOwnPageIconId($namespace, $startId, $sizeMode, $extensions, false);
+                if ($iconID) {
+                    return $this->buildIconDetails($iconID, 'namespace_start_page', $namespace, $namespace, $startId, $fallbackMode);
+                }
+            }
         }
 
         $leafPageID = cleanID($namespace . ':' . $pageID);
         if ($leafPageID !== '' && page_exists($leafPageID)) {
-            $iconID = $this->resolveOwnPageIconId($namespace, $pageID, $sizeMode, $extensions);
+            $iconID = $this->resolveOwnPageIconId($namespace, $pageID, $sizeMode, $extensions, false);
             if ($iconID) {
                 return $this->buildIconDetails($iconID, 'namespace_leaf_page', $namespace, $namespace, $pageID, $fallbackMode);
             }
         }
 
-        if (isset($conf['start'])) {
-            $startId = cleanID((string)$conf['start']);
-            if ($startId !== '') {
-                $iconID = $this->resolveOwnPageIconId($namespace, $startId, $sizeMode, $extensions);
-                if ($iconID) {
-                    return $this->buildIconDetails($iconID, 'namespace_start_page', $namespace, $namespace, $startId, $fallbackMode);
-                }
-            }
+        $iconID = $this->resolveOwnPageIconId($parentNamespace, $pageID, $sizeMode, $extensions, false);
+        if ($iconID) {
+            return $this->buildIconDetails($iconID, 'namespace_page', $namespace, $parentNamespace, $pageID, $fallbackMode);
         }
 
         return false;
@@ -314,9 +525,12 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         if ($fallbackMode === 'none') return false;
 
         $currentNamespace = $namespace ?: '';
+        $seenLookupNamespaces = [];
         while ($currentNamespace !== '') {
             $parentNamespace = (string)(getNS($currentNamespace) ?: '');
-            $lookupNamespace = $parentNamespace !== '' ? $parentNamespace : $currentNamespace;
+            $lookupNamespace = cleanID($parentNamespace !== '' ? $parentNamespace : $currentNamespace);
+            if ($lookupNamespace === '' || isset($seenLookupNamespaces[$lookupNamespace])) break;
+            $seenLookupNamespaces[$lookupNamespace] = true;
             $iconID = $this->resolveNamespacePageIconId($lookupNamespace, $sizeMode, $extensions);
             if ($iconID) return $iconID;
             if ($fallbackMode === 'direct' || $parentNamespace === '') break;
@@ -350,9 +564,12 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
 
         $currentNamespace = $namespace ?: '';
         $depth = 0;
+        $seenLookupNamespaces = [];
         while ($currentNamespace !== '') {
             $parentNamespace = (string)(getNS($currentNamespace) ?: '');
-            $lookupNamespace = $parentNamespace !== '' ? $parentNamespace : $currentNamespace;
+            $lookupNamespace = cleanID($parentNamespace !== '' ? $parentNamespace : $currentNamespace);
+            if ($lookupNamespace === '' || isset($seenLookupNamespaces[$lookupNamespace])) break;
+            $seenLookupNamespaces[$lookupNamespace] = true;
             $details = $this->resolveNamespacePageIconDetails($lookupNamespace, $sizeMode, $extensions, $fallbackMode);
             if ($details) {
                 $details['origin'] = $depth === 0 ? 'direct_parent' : 'first_parent_found';
@@ -501,9 +718,9 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         $mediaID = $this->getConfiguredDefaultImageMediaID();
         if ($mediaID) {
             $mtime = $this->getMediaMTime((string)$mediaID);
-            $url = (string)ml((string)$mediaID, $params);
+            $url = (string)ml((string)$mediaID, $params, true, '&');
             if ($url === '') return false;
-            return $this->appendVersionToUrl($url, $mtime);
+            return $url;
         }
 
         $mtime = 0;
@@ -545,9 +762,9 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         }
 
         $mtime = $this->getMediaMTime((string)$mediaID);
-        $url = (string)ml((string)$mediaID, $params);
+        $url = (string)ml((string)$mediaID, $params, true, '&');
         if ($url === '') return false;
-        return $this->appendVersionToUrl($url, $mtime);
+        return $url;
     }
 
     /**
@@ -588,9 +805,23 @@ class helper_plugin_pagesicon extends DokuWiki_Plugin {
         }
 
         $mtime = $this->getMediaMTime((string)$iconMediaID);
-        $url = (string)ml((string)$iconMediaID, $params);
+        $url = (string)ml((string)$iconMediaID, $params, true, '&');
         if ($url === '') return false;
-        return $this->appendVersionToUrl($url, $mtime);
+        return $url;
+    }
+
+    /**
+     * Added in version 2026-07-20.
+     * Returns a versioned media URL with the current pagesicon cache token.
+     */
+    public function getManagedMediaUrl(string $mediaID, array $params = ['w' => 55], ?int &$mtime = null) {
+        $mediaID = cleanID($mediaID);
+        if ($mediaID === '') return false;
+
+        $mtime = $this->getMediaMTime($mediaID);
+        $url = (string)ml($mediaID, $params, true, '&');
+        if ($url === '') return false;
+        return $url;
     }
 
     /**

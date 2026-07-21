@@ -124,7 +124,7 @@ If no icon is found on the page itself, the plugin can also inherit:
   * the direct parent icon;
   * the first icon found while walking up parent namespaces.
 
-The URLs returned by the helper are versioned with a ''pi_ts'' parameter based on the media ''filemtime''.
+Media URLs returned by the helper use DokuWiki's native ''ml()'' handling and the ''tok'' token for resized images. Additional cache invalidation relies on the ''purgefile'', the ''PLUGIN_PAGESICON_UPDATED'' event, and the manual refresh button.
 
 ===== Notes =====
 

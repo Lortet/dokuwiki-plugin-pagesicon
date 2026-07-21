@@ -114,7 +114,7 @@ Si aucune icône n'est trouvée sur la page elle-même, le plugin peut aussi hé
   * de l'icône du parent direct ;
   * de la première icône trouvée en remontant les parents.
 
-Les URLs retournées par le helper sont versionnées avec un paramètre ''pi_ts'' basé sur le ''filemtime'' du média.
+Les URLs de médias DokuWiki retournées par le helper utilisent le mécanisme natif de ''ml()'' et du token ''tok'' pour les redimensionnements. L'invalidation de cache complémentaire passe par le fichier ''purgefile'', l'événement ''PLUGIN_PAGESICON_UPDATED'' et le bouton manuel de rafraîchissement.
 
 ===== Notes =====
 

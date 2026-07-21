@@ -190,8 +190,8 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		return (string)array_key_first($choices);
 	}
 
-	private function getMediaManagerUrl(string $targetPage): string {
-		$namespace = getNS($targetPage);
+	private function getMediaManagerUrl(string $mediaID): string {
+		$namespace = getNS($mediaID);
 		return DOKU_MEDIAMANAGER_URL_BASE . '?ns=' . rawurlencode($namespace);
 	}
 
@@ -226,18 +226,23 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 
 	private function renderCurrentIconPreview(array $details, string $defaultTarget, string $actionPage, int $previewSize): void {
 		$mediaID = (string)($details['media_id'] ?? '');
-		$absolutePath = (string)($details['absolute_path'] ?? '');
+		$mediaPath = (string)($details['media_path'] ?? '');
 		$originLabel = $this->getIconOriginLabel($details);
+		/** @var helper_plugin_pagesicon|null $helper */
+		$helper = plugin_load('helper', 'pagesicon');
+		$previewUrl = ($helper && method_exists($helper, 'getManagedMediaUrl'))
+			? $helper->getManagedMediaUrl($mediaID, ['w' => $previewSize])
+			: ml($mediaID, ['w' => $previewSize], true, '&');
 
-		echo '<a href="' . hsc($this->getMediaManagerUrl($defaultTarget)) . '" target="_blank" title="' . hsc($this->getLang('open_media_manager')) . '">';
-		echo '<img src="' . ml($mediaID, ['w' => $previewSize]) . '" alt="" width="' . $previewSize . '" style="display:block;margin:6px 0;" />';
+		echo '<a href="' . hsc($this->getMediaManagerUrl($mediaID)) . '" target="_blank" title="' . hsc($this->getLang('open_media_manager')) . '">';
+		echo '<img src="' . hsc((string)$previewUrl) . '" alt="" width="' . $previewSize . '" style="display:block;margin:6px 0;" />';
 		echo '</a>';
 		echo '<small>' . hsc(noNS($mediaID)) . '</small>';
 		if ($originLabel !== '') {
 			echo '<br /><small>' . hsc(sprintf($this->getLang('current_icon_origin'), $originLabel)) . '</small>';
 		}
-		if ($absolutePath !== '') {
-			echo '<br /><small>' . hsc(sprintf($this->getLang('current_icon_absolute_path'), $absolutePath)) . '</small>';
+		if ($mediaPath !== '') {
+			echo '<br /><small>' . hsc(sprintf($this->getLang('current_icon_media_path'), $mediaPath)) . '</small>';
 		}
 		echo '<form action="' . wl($actionPage) . '" method="post" style="margin-top:6px;">';
 		formSecurityToken();
@@ -246,6 +251,183 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		echo '<input type="hidden" name="pagesicon_delete_submit" value="1" />';
 		echo '<button type="submit" class="button">' . hsc($this->getLang('delete_icon')) . '</button>';
 		echo '</form>';
+	}
+
+	private function buildOwnIconDetailsList($helper, string $namespace, string $pageID, string $size, $currentDetails): array {
+		if (!$helper || !method_exists($helper, 'getOwnPageIconMediaIds')) return [];
+
+		$currentMediaID = is_array($currentDetails) ? cleanID((string)($currentDetails['media_id'] ?? '')) : '';
+		$mediaIDs = $helper->getOwnPageIconMediaIds($namespace, $pageID, $size);
+		$detailsList = [];
+
+		foreach ($mediaIDs as $mediaID) {
+			$mediaID = cleanID((string)$mediaID);
+			if ($mediaID === '' || $mediaID === $currentMediaID) continue;
+
+			$detailsList[] = [
+				'media_id' => $mediaID,
+				'media_path' => $mediaID,
+				'origin' => 'current_page',
+				'source_page' => cleanID(($namespace !== '' ? $namespace . ':' : '') . $pageID),
+			];
+		}
+
+		return $detailsList;
+	}
+
+	private function renderCurrentIconSection(string $title, $currentDetails, array $ownVariants, string $defaultTarget, string $actionPage, int $previewSize): void {
+		echo '<div class="pagesicon-current-item">';
+		echo '<strong>' . hsc($title) . '</strong><br />';
+
+		if ($currentDetails) {
+			$this->renderCurrentIconPreview($currentDetails, $defaultTarget, $actionPage, $previewSize);
+		} else {
+			echo '<small>' . hsc($this->getLang('current_icon_none')) . '</small>';
+		}
+
+		if ($ownVariants) {
+			echo '<div style="margin-top:8px;">';
+			echo '<small><strong>' . hsc($this->getLang('current_icon_other_variants')) . '</strong></small>';
+			foreach ($ownVariants as $variantDetails) {
+				echo '<div style="margin-top:6px;">';
+				$this->renderCurrentIconPreview($variantDetails, $defaultTarget, $actionPage, $previewSize);
+				echo '</div>';
+			}
+			echo '</div>';
+		}
+
+		echo '</div>';
+	}
+
+	private function getDebugStepLabel(string $label): string {
+		$langKey = 'debug_step_' . $label;
+		$translated = (string)$this->getLang($langKey);
+		if ($translated !== '' && $translated !== $langKey) return $translated;
+		return $label;
+	}
+
+	private function formatDebugNamespace(string $namespace): string {
+		$namespace = cleanID($namespace);
+		return $namespace !== '' ? $namespace : (string)$this->getLang('debug_root_namespace');
+	}
+
+	private function splitDebugMediaId(string $mediaID): array {
+		$mediaID = cleanID($mediaID);
+		return [
+			'path' => $this->formatDebugNamespace(getNS($mediaID)),
+			'file' => noNS($mediaID),
+		];
+	}
+
+	private function renderDebugMediaFileCell($helper, string $mediaID, bool $exists): string {
+		$mediaID = cleanID($mediaID);
+		$file = noNS($mediaID);
+		if ($file === '') return '-';
+
+		$label = '<code>' . hsc($file) . '</code>';
+		$link = hsc($this->getMediaManagerUrl($mediaID));
+		$html = '<a href="' . $link . '" target="_blank" title="' . hsc($this->getLang('open_media_manager')) . '">' . $label . '</a>';
+
+		if (!$exists) return $html;
+
+		$previewUrl = ($helper && method_exists($helper, 'getManagedMediaUrl'))
+			? $helper->getManagedMediaUrl($mediaID, ['w' => 48])
+			: ml($mediaID, ['w' => 48], true, '&');
+		if ($previewUrl) {
+			$html .= '<br /><a href="' . $link . '" target="_blank" title="' . hsc($this->getLang('open_media_manager')) . '">';
+			$html .= '<img src="' . hsc((string)$previewUrl) . '" alt="" width="24" style="display:block;margin-top:4px;" />';
+			$html .= '</a>';
+		}
+
+		return $html;
+	}
+
+	private function renderDebugInfo($helper, string $namespace, string $pageID): void {
+		if (!$helper || !method_exists($helper, 'getPageIconDebugInfo')) return;
+
+		$debugBig = $helper->getPageIconDebugInfo($namespace, $pageID, 'big');
+		$debugSmall = $helper->getPageIconDebugInfo($namespace, $pageID, 'small');
+
+		echo '<div class="pagesicon-debug" style="margin:16px 0 20px;">';
+		echo '<h2>' . hsc($this->getLang('debug_title')) . '</h2>';
+		echo '<p><small>' . hsc($this->getLang('debug_intro')) . '</small></p>';
+
+		foreach (['big' => $debugBig, 'small' => $debugSmall] as $variant => $debugInfo) {
+			echo '<h3>' . hsc(sprintf($this->getLang('debug_variant_title'), $variant)) . '</h3>';
+			if (!is_array($debugInfo) || empty($debugInfo['steps'])) {
+				echo '<p><small>' . hsc($this->getLang('current_icon_none')) . '</small></p>';
+				continue;
+			}
+
+			$renderedSteps = [];
+			echo '<div style="overflow-x:auto;max-width:100%;">';
+			echo '<table class="inline" style="min-width:720px;table-layout:fixed;">';
+			echo '<thead><tr>';
+			echo '<th>' . hsc($this->getLang('debug_col_scope')) . '</th>';
+			echo '<th>' . hsc($this->getLang('debug_col_media_path')) . '</th>';
+			echo '<th>' . hsc($this->getLang('debug_col_media_file')) . '</th>';
+			echo '<th>' . hsc($this->getLang('debug_col_exists')) . '</th>';
+			echo '</tr></thead><tbody>';
+
+			foreach (array_values($debugInfo['steps']) as $stepIndex => $step) {
+				$stepLabel = sprintf($this->getLang('debug_step_title'), $stepIndex + 1, $this->getDebugStepLabel((string)($step['label'] ?? '')));
+				$targetPage = cleanID((string)($step['target_page'] ?? ''));
+				$targetNamespace = $this->formatDebugNamespace((string)($step['namespace'] ?? ''));
+				$contextNamespace = $this->formatDebugNamespace((string)($step['context_namespace'] ?? ''));
+				$checks = $step['checks'] ?? [];
+				$stepKey = $stepLabel . '|' . $targetPage . '|' . $targetNamespace . '|' . $contextNamespace;
+				if (isset($renderedSteps[$stepKey])) continue;
+				$renderedSteps[$stepKey] = true;
+
+				if (!is_array($checks) || !$checks) {
+					echo '<tr>';
+					echo '<td style="white-space:normal;word-break:break-word;">' . hsc($stepLabel) . '</td>';
+					echo '<td>-</td>';
+					echo '<td>-</td>';
+					echo '<td>' . hsc($this->getLang('debug_exists_no')) . '</td>';
+					echo '</tr>';
+					continue;
+				}
+
+				foreach ($checks as $checkIndex => $check) {
+					$mediaID = cleanID((string)($check['media_id'] ?? ''));
+					$exists = !empty($check['exists']);
+					$media = $this->splitDebugMediaId($mediaID);
+					echo '<tr>';
+					echo '<td style="white-space:normal;word-break:break-word;">' . ($checkIndex === 0 ? hsc($stepLabel) : '') . '</td>';
+					echo '<td style="white-space:normal;word-break:break-word;"><code>' . hsc((string)$media['path']) . '</code></td>';
+					echo '<td style="white-space:normal;word-break:break-word;">' . $this->renderDebugMediaFileCell($helper, $mediaID, $exists) . '</td>';
+					echo '<td>' . hsc($exists ? $this->getLang('debug_exists_yes') : $this->getLang('debug_exists_no')) . '</td>';
+					echo '</tr>';
+				}
+			}
+
+			echo '</tbody></table>';
+			echo '</div>';
+		}
+
+		echo '</div>';
+	}
+
+	private function handleRefreshCachePost(): void {
+		global $INPUT, $ID;
+
+		if (!$INPUT->post->has('pagesicon_refresh_cache_submit')) return;
+		if (!checkSecurityToken()) return;
+
+		$targetPage = cleanID((string)$ID);
+		if ($targetPage === '') return;
+		if (!$this->canUploadToTarget($targetPage)) {
+			msg($this->getLang('error_no_upload_permission'), -1);
+			return;
+		}
+
+		$helper = plugin_load('helper', 'pagesicon');
+		if ($helper && method_exists($helper, 'notifyIconUpdated')) {
+			$helper->notifyIconUpdated($targetPage, 'refresh-cache', '');
+		}
+
+		msg((string)$this->getLang('cache_refresh_success'), 1);
 	}
 
 	private function handleDeletePost(): void {
@@ -270,7 +452,9 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		$helper = plugin_load('helper', 'pagesicon');
 		$currentBig = ($helper && method_exists($helper, 'getPageIconId')) ? (string)$helper->getPageIconId($namespace, $pageID, 'big') : '';
 		$currentSmall = ($helper && method_exists($helper, 'getPageIconId')) ? (string)$helper->getPageIconId($namespace, $pageID, 'small') : '';
-		$allowed = array_values(array_filter(array_unique([$currentBig, $currentSmall])));
+		$ownBig = ($helper && method_exists($helper, 'getOwnPageIconMediaIds')) ? $helper->getOwnPageIconMediaIds($namespace, $pageID, 'big') : [];
+		$ownSmall = ($helper && method_exists($helper, 'getOwnPageIconMediaIds')) ? $helper->getOwnPageIconMediaIds($namespace, $pageID, 'small') : [];
+		$allowed = array_values(array_filter(array_unique(array_merge([$currentBig, $currentSmall], $ownBig, $ownSmall))));
 		if (!$allowed || !in_array($mediaID, $allowed, true)) {
 			msg($this->getLang('error_delete_invalid'), -1);
 			return;
@@ -396,7 +580,11 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		$previewSize = $this->getIconSize();
 		$currentBig = ($helper && method_exists($helper, 'getPageIconDetails')) ? $helper->getPageIconDetails($namespace, $pageID, 'big') : false;
 		$currentSmall = ($helper && method_exists($helper, 'getPageIconDetails')) ? $helper->getPageIconDetails($namespace, $pageID, 'small') : false;
+		$ownBigVariants = $this->buildOwnIconDetailsList($helper, $namespace, $pageID, 'big', $currentBig);
+		$ownSmallVariants = $this->buildOwnIconDetailsList($helper, $namespace, $pageID, 'small', $currentSmall);
 		$fallbackMode = ($helper && method_exists($helper, 'getCurrentFallbackMode')) ? $helper->getCurrentFallbackMode() : 'none';
+		$showDebug = (bool)$INPUT->bool('pagesicon_debug');
+		$debugUrl = wl($actionPage, ['do' => 'pagesicon', 'pagesicon_debug' => $showDebug ? 0 : 1], false, '&');
 
 		echo '<h1>' . hsc($this->getLang('menu')) . '</h1>';
 		echo '<p>' . hsc($this->getLang('intro')) . '</p>';
@@ -404,23 +592,12 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		echo '<p><small>' . hsc($this->getLang('icon_scope_help')) . '</small></p>';
 		echo '<p><small>' . hsc(sprintf($this->getLang('allowed_extensions'), $allowed)) . '</small></p>';
 		echo '<div class="pagesicon-current-preview" style="display:flex;gap:24px;align-items:flex-start;flex-wrap:wrap;margin:10px 0 16px;">';
-		echo '<div class="pagesicon-current-item">';
-		echo '<strong>' . hsc($this->getLang('current_big_icon')) . '</strong><br />';
-		if ($currentBig) {
-			$this->renderCurrentIconPreview($currentBig, $defaultTarget, $actionPage, $previewSize);
-		} else {
-			echo '<small>' . hsc($this->getLang('current_icon_none')) . '</small>';
+		$this->renderCurrentIconSection((string)$this->getLang('current_big_icon'), $currentBig, $ownBigVariants, $defaultTarget, $actionPage, $previewSize);
+		$this->renderCurrentIconSection((string)$this->getLang('current_small_icon'), $currentSmall, $ownSmallVariants, $defaultTarget, $actionPage, $previewSize);
+		echo '</div>';
+		if ($showDebug) {
+			$this->renderDebugInfo($helper, $namespace, $pageID);
 		}
-		echo '</div>';
-		echo '<div class="pagesicon-current-item">';
-		echo '<strong>' . hsc($this->getLang('current_small_icon')) . '</strong><br />';
-		if ($currentSmall) {
-			$this->renderCurrentIconPreview($currentSmall, $defaultTarget, $actionPage, $previewSize);
-		} else {
-			echo '<small>' . hsc($this->getLang('current_icon_none')) . '</small>';
-		}
-		echo '</div>';
-		echo '</div>';
 
 		echo '<form action="' . wl($actionPage) . '" method="post" enctype="multipart/form-data"'
 			. ' class="pagesicon-upload-form"'
@@ -465,7 +642,11 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		echo '</tr>';
 		echo '</table></div>';
 
-		echo '<p><button type="submit" class="button">' . hsc($this->getLang('upload_button')) . '</button></p>';
+		echo '<p style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">';
+		echo '<button type="submit" class="button">' . hsc($this->getLang('upload_button')) . '</button>';
+		echo '<button type="submit" class="button" formaction="' . wl($actionPage) . '" formmethod="post" formenctype="application/x-www-form-urlencoded" formnovalidate="formnovalidate" name="pagesicon_refresh_cache_submit" value="1">' . hsc($this->getLang('refresh_cache_button')) . '</button>';
+		echo '<a class="button" href="' . hsc($debugUrl) . '">' . hsc($showDebug ? $this->getLang('debug_hide_button') : $this->getLang('debug_button')) . '</a>';
+		echo '</p>';
 		echo '</form>';
 	}
 		
@@ -490,7 +671,7 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		$size = $this->getIconSize();
 		$src = $helper->getPageIconUrl($namespace, $pageID, $sizeMode, ['w' => $size]);
 		if(!$src) return;
-		$iconHtml = '<img src="' . $src . '" class="media pagesicon-image" loading="lazy" alt="" width="' . $size . '" />';
+		$iconHtml = '<img src="' . hsc((string)$src) . '" class="media pagesicon-image" loading="lazy" alt="" width="' . $size . '" />';
 
 		$inlineIcon = '<span class="pagesicon-injected pagesicon-injected-inline">' . $iconHtml . '</span> ';
 		$updated = preg_replace('/<h1\b([^>]*)>/i', '<h1$1>' . $inlineIcon, $event->data, 1, $count);
@@ -529,7 +710,7 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 				$pageId = html_entity_decode($m[3], ENT_QUOTES | ENT_HTML5, 'UTF-8');
 				$iconUrl = $this->getLinkIconUrl($helper, $pageId);
 				if (!$iconUrl) return $m[1];
-				return $m[1] . '<img src="' . $iconUrl . '" class="pagesicon-link" alt="" width="16" height="16" loading="lazy">';
+				return $m[1] . '<img src="' . hsc((string)$iconUrl) . '" class="pagesicon-link" alt="" width="16" height="16" loading="lazy">';
 			},
 			(string)$event->data[1]
 		);
@@ -544,6 +725,7 @@ class action_plugin_pagesicon extends DokuWiki_Action_Plugin {
 		global $ACT;
 		if ($ACT !== 'pagesicon') return;
 
+		$this->handleRefreshCachePost();
 		$this->handleDeletePost();
 		$this->handleUploadPost();
 		$this->renderUploadForm();

@@ -124,7 +124,7 @@ Wenn auf der Seite kein Icon gefunden wird, kann das Plugin auch erben:
   * das Icon des direkten Elternteils;
   * das erste Icon beim Durchlaufen der übergeordneten Namensräume.
 
-Die vom Helper zurückgegebenen URLs sind mit einem ''pi_ts''-Parameter versioniert, der auf dem ''filemtime'' des Mediums basiert.
+Die vom Helper zurückgegebenen DokuWiki-Medien-URLs verwenden die native ''ml()''-Behandlung und den ''tok''-Token für skalierte Bilder. Zusätzliche Cache-Invalidierung erfolgt über die ''purgefile'', das Ereignis ''PLUGIN_PAGESICON_UPDATED'' und die manuelle Schaltfläche zum Aktualisieren.
 
 ===== Hinweise =====
 

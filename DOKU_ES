@@ -124,7 +124,7 @@ Si no se encuentra ningún icono en la página, el plugin también puede heredar
   * el icono del padre directo;
   * el primer icono encontrado al recorrer los espacios de nombres padre.
 
-Las URLs devueltas por el helper están versionadas con un parámetro ''pi_ts'' basado en el ''filemtime'' del medio.
+Las URLs de medios DokuWiki devueltas por el helper usan el manejo nativo de ''ml()'' y el token ''tok'' para las imágenes redimensionadas. La invalidación de caché adicional se basa en ''purgefile'', el evento ''PLUGIN_PAGESICON_UPDATED'' y el botón manual de refresco.
 
 ===== Notas =====
 
